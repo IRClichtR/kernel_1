@@ -1,0 +1,62 @@
+# Rust specific ignores
+/target/
+**/*.rs.bk
+*.pdb
+Cargo.lock
+# Comment the line below if you want to check in the lock file
+# Cargo.lock
+
+# VSCode specific ignores
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.history/
+.ionide/
+
+# General ignores
+# Binaries and objects
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.obj
+
+# Backups
+*~
+*.bak
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# OS specific
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.directory
+.Trash-*
+
+# Objects and bin file
+rust_os/build
+
+# ISO
+rust_os/dist
