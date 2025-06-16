@@ -1,0 +1,21 @@
+[package]
+name = "rust_os"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+name = "rust_os"
+crate-type = ["staticlib"]
+
+
+[dependencies]
+spin = "0.9"
+lazy_static = { version = "1.4.0", features = ["spin_no_std"] }
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+
+
