@@ -149,7 +149,7 @@ use core::fmt;
 use spin::Mutex;
 use lazy_static::lazy_static;
 // port
-use crate::arch::x86::port::{outb};
+use crate::arch::x86::port::{outb, inb};
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -183,7 +183,29 @@ impl Writer {
             column_position: 0,
             row_position: 0,
             buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
+        };
+
+        // get current position from hardware
+        let (row, col) = Self::get_cursor_position();
+        // set the initial position
+        Writer {
+            column_position: col,
+            row_position: row,
+            buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
         }
+    }
+
+    pub fn get_cursor_position() -> (usize, usize) {
+        let mut pos: u16 = 0;
+        unsafe {
+            outb(0x3D4, 0x0F);
+            pos |= (inb(0x3D5) as u16);
+            outb(0x3D4, 0x0E);
+            pos |= ((inb(0x3D5) as u16) << 8);
+        }
+        let row = (pos / BUFFER_WIDTH as u16) as usize;
+        let col = (pos % BUFFER_WIDTH as u16) as usize;
+        (row, col)
     }
 
     pub fn write_byte(&mut self, byte: u8) {
