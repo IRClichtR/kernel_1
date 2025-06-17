@@ -18,7 +18,7 @@ pub extern "C" fn kernel_main() -> ! {
     loop {
         // Poll keyboard for input
         if let Some(key) = keyboard::poll_keyboard() {
-            printk!(LogLevel::Info, "{}", key);
+            printk!(LogLevel::Default, "{}", key);
         } 
     }
 }
