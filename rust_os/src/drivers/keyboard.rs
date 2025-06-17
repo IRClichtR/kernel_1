@@ -1,160 +1,136 @@
-// use crate::arch::x86::port::{inb, outb};
-// use crate::{printk, printk::printk::{LogLevel}};
+use crate::arch::x86::port::{inb, outb};
+use crate::printk;
+use crate::printk::printk::LogLevel;
 
-// // CONST FOR KEYBOARD CONTROLLER
-// pub const KEYBOARD_DATA_PORT: u16 = 0x60;
-// pub const KEYBOARD_STATUS_PORT: u16 = 0x64;
-// pub const KEYBOARD_COMMAND_PORT: u16 = 0x64;
+// keyboard ports
+const KEYBOARD_DATA_PORT: u16 = 0x60;
+const KEYBOARD_STATUS_PORT: u16 = 0x64;
 
-// // Keyboard command codes
-// const KC_READ_CONFIG: u8 = 0x20;
-// const KC_WRITE_CONFIG: u8 = 0x60;
+// Convert scancode to ASCII
+const SCANCODE_TO_ASCII: [u8; 128] = [
+    0,  27, b'1', b'2', b'3', b'4', b'5', b'6',  // 0x00-0x07
+    b'7', b'8', b'9', b'0', b'-', b'=', 8,       // 0x08-0x0E (8 = backspace)
+    b'\t', b'q', b'w', b'e', b'r', b't', b'y', b'u', // 0x0F-0x16
+    b'i', b'o', b'p', b'[', b']', b'\n',          // 0x17-0x1C (Enter)
+    0,    // 0x1D (Ctrl gauche)
+    b'a', b's', b'd', b'f', b'g', b'h', b'j', b'k', b'l', // 0x1E-0x26
+    b';', b'\'', b'`', 0,  // 0x27-0x2A (Shift gauche)
+    b'\\', b'z', b'x', b'c', b'v', b'b', b'n', b'm', // 0x2B-0x32
+    b',', b'.', b'/', 0,   // 0x33-0x36 (Shift droit)
+    b'*',
+    0,    // 0x38 (Alt gauche)
+    b' ', // 0x39 (Espace)
+    0,    // 0x3A (Caps lock)
+    // F1-F10 keys (0x3B-0x44)
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0,    // 0x45 (Num lock)
+    0,    // 0x46 (Scroll lock)
+    b'7', b'8', b'9', b'-', // 0x47-0x4A (Keypad)
+    b'4', b'5', b'6', b'+', // 0x4B-0x4E (Keypad)
+    b'1', b'2', b'3',       // 0x4F-0x51 (Keypad)
+    b'0', b'.',             // 0x52-0x53 (Keypad)
+    // Reste rempli de zéros (0x54-0x7F = 44 éléments)
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+];
 
-// // Buffer for scan codes
-// const BUFFER_SIZE: usize = 16;
-// static mut KEYBOARD_BUFFER: [u8; BUFFER_SIZE] = [0; BUFFER_SIZE];
-// static mut BUFFER_HEAD: usize = 0;
-// static mut BUFFER_TAIL: usize = 0;
-// static mut KEY_AVAILABLE: bool = false;
+static mut SHIFT_PRESSED: bool = false;
+static mut CTRL_PRESSED: bool = false;
+static mut ALT_PRESSED: bool = false;
 
-// #[inline(never)]
-// pub unsafe fn initialize_keyboard() {
-//     // Beep the PC speaker to confirm function entry
-//     outb(0x43, 0xB6);
-//     outb(0x42, 0x1B);
-//     outb(0x42, 0x00);
-//     let tmp = inb(0x61);
-//     outb(0x61, tmp | 3);
+pub fn init_keyboard() {
+    unsafe {
+        while keyboard_has_data() {
+            let _ = inb(KEYBOARD_DATA_PORT);
+        }
+    }
+    printk!(LogLevel::Info, "Keyboard initialized.\n");
+}
 
-//     // Wait for the keyboard controller to be ready
-//     printk!(LogLevel::Debug, "Keyboard controller is ready\n");
-//     while (inb(KEYBOARD_STATUS_PORT) & 2) != 0 {}
+pub fn keyboard_has_data() -> bool {
+    unsafe {
+        inb(KEYBOARD_STATUS_PORT) & 0x01 != 0
+    }
+}
 
-//     // Read the current configuration byte
-//     outb(KEYBOARD_COMMAND_PORT, KC_READ_CONFIG);
+pub fn poll_keyboard() -> Option<char> {
+    if !keyboard_has_data() {
+        return None;
+    }
 
-//     // wAIT FOR DATA TO BE READY
-//     while (inb(KEYBOARD_STATUS_PORT) & 1) == 0 {}
+    unsafe {
+        let scancode = inb(KEYBOARD_DATA_PORT);
+        handle_scancode(scancode)
+    }
+}
 
-//     //Read config byte
-//     let config_byte = inb(KEYBOARD_DATA_PORT);
+pub fn handle_scancode(scancode: u8) -> Option<char> {
+   let key_released = scancode & 0x80 != 0;
+   let key_code = scancode & 0x7F;
 
-//     let new_config_byte = (config_byte | 1) & 0xFD; // Disable the keyboard interrupt 
+   unsafe {
+        match key_code {
+            0x2A | 0x36 => { // shift keys
+                SHIFT_PRESSED = !key_released;
+                return None;
+            }
+            0x1D => { // left control key
+                CTRL_PRESSED = !key_released;
+                return None;
+            }
+            _ => {} // other keys
+        }
+   }
 
-//     // Wait for the keyboard controller to be ready
-//     while (inb(KEYBOARD_STATUS_PORT) & 2) != 0 {}
+   // return non on modificators
+   if matches!(key_code, 0x2A | 0x36 | 0x1D) {
+        return None; // Ignore modifier keys
+    }
 
-//     // Write the new configuration byte
-//     outb(KEYBOARD_COMMAND_PORT, KC_WRITE_CONFIG);
+   if key_released {
+        return None;
+    }
 
-//     // Wait for the keyboard controller to be ready
-//     while (inb(KEYBOARD_STATUS_PORT) & 2) != 0 {}
-//     outb(KEYBOARD_DATA_PORT, new_config_byte);
+    if (key_code as usize) < SCANCODE_TO_ASCII.len() {
+        let mut ascii = SCANCODE_TO_ASCII[key_code as usize];
 
-//     while (inb(KEYBOARD_STATUS_PORT) & 1) != 0 {
-//         inb(KEYBOARD_DATA_PORT); // Read and discard any data
-//     };
+        if ascii == 0 {
+            return None; // No mapping for this scancode
+        }
 
-//     // Turn off the speaker when done
-//     let tmp = inb(0x61);
-//     outb(0x61, tmp & 0xFC);
-// }
+        unsafe {
+            if SHIFT_PRESSED {
+                //Conferts to uppercase if Shift is pressed
+                ascii = match ascii {
+                    b'a'..=b'z' => ascii - 32, // Convert to uppercase
+                    b'1' => '!' as u8,
+                    b'2' => '@' as u8,
+                    b'3' => '#' as u8,
+                    b'4' => '$' as u8,
+                    b'5' => '%' as u8,
+                    b'6' => '^' as u8,
+                    b'7' => '&' as u8,
+                    b'8' => '*' as u8,
+                    b'9' => '(' as u8,
+                    b'0' => ')' as u8,
+                    b'-' => '_' as u8,
+                    b'=' => '+' as u8,
+                    b'[' => '{' as u8,
+                    b']' => '}' as u8,
+                    b';' => ':' as u8,
+                    b'\'' => '"' as u8,
+                    b'\\' => '|' as u8,
+                    b',' => '<' as u8,
+                    b'.' => '>' as u8,
+                    b'/' => '?' as u8,
+                    _ => ascii,
+                };
+            }
+        }
 
-// pub fn handle_scan_code(scan_code: u8) {
-//     unsafe {
-//         // Simple mapping for common keys (add more as needed)
-//         let character = match scan_code {
-//             0x1E => 'a',
-//             0x30 => 'b',
-//             0x2E => 'c',
-//             0x20 => 'd',
-//             0x12 => 'e',
-//             0x21 => 'f',
-//             0x22 => 'g',
-//             0x23 => 'h',
-//             0x17 => 'i',
-//             0x24 => 'j',
-//             0x25 => 'k',
-//             0x26 => 'l',
-//             0x32 => 'm',
-//             0x31 => 'n',
-//             0x18 => 'o',
-//             0x19 => 'p',
-//             0x10 => 'q',
-//             0x13 => 'r',
-//             0x1F => 's',
-//             0x14 => 't',
-//             0x16 => 'u',
-//             0x2F => 'v',
-//             0x11 => 'w',
-//             0x2D => 'x',
-//             0x15 => 'y',
-//             0x2C => 'z',
-//             0x39 => ' ', // Space
-//             0x1C => '\n', // Enter
-//             _ => '\0'    // Null character for unmapped keys
-//         };
-        
-//         // Only print if it's a valid character (not null)
-//         if character != '\0' {
-//             // Print both the scan code and the character
-//             printk!(LogLevel::Info, 
-//                 "Key: '{}' (scan code: {:#x})\n", character, scan_code);
-//         } else {
-//             // Just print the scan code for unmapped keys
-//             printk!(LogLevel::Debug, 
-//                 "Unmapped scan code: {:#x}\n", scan_code);
-//         }
-//         // printk!(LogLevel::Info, "Scan code: {:#X}\n", scan_code);
-//     }
-// }
-
-// // Add a scan code to the buffer (called from interrupt handler)
-// pub unsafe fn add_scan_code(scan_code: u8) {
-//     let next_head = (BUFFER_HEAD + 1) % KEYBOARD_BUFFER.len();
-//     if next_head != BUFFER_TAIL {
-//         KEYBOARD_BUFFER[BUFFER_HEAD] = scan_code;
-//         BUFFER_HEAD = next_head;
-//         KEY_AVAILABLE = true;
-//     }
-// }
-
-// pub unsafe fn process_keyboard() -> bool {
-//     if !KEY_AVAILABLE {
-//         return false;
-//     }
-
-//     let mut processed = false;
-
-//     while BUFFER_HEAD != BUFFER_TAIL {
-//         let scan_code = KEYBOARD_BUFFER[BUFFER_TAIL];
-//         BUFFER_TAIL = (BUFFER_TAIL + 1) % BUFFER_SIZE;
-
-//         handle_scan_code(scan_code);
-//         processed = true;
-//     }
-
-//     if BUFFER_HEAD == BUFFER_TAIL {
-//         KEY_AVAILABLE = false;
-//     }
-
-//     processed
-// }
-
-// // pub fn is_key_available() -> bool {
-// //     unsafe {
-// //         BUFFER_HEAD != BUFFER_TAIL
-// //     }
-// // }
-
-// // pub fn get_key() -> Option<u8> {
-// //     unsafe {
-// //         if BUFFER_HEAD != BUFFER_TAIL {
-// //             let key = KEYBOARD_BUFFER[BUFFER_TAIL];
-// //             BUFFER_TAIL = (BUFFER_TAIL + 1) % BUFFER_SIZE;
-// //             Some(key)
-// //         } else {
-// //             None
-// //         }
-// //     }
-// // }
+        Some(ascii as char)
+    } else {
+        None // Invalid scancode
+    }
+}

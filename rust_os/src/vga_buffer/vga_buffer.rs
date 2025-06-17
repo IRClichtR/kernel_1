@@ -199,9 +199,9 @@ impl Writer {
         let mut pos: u16 = 0;
         unsafe {
             outb(0x3D4, 0x0F);
-            pos |= (inb(0x3D5) as u16);
+            pos |= inb(0x3D5) as u16;
             outb(0x3D4, 0x0E);
-            pos |= ((inb(0x3D5) as u16) << 8);
+            pos |= (inb(0x3D5) as u16) << 8;
         }
         let row = (pos / BUFFER_WIDTH as u16) as usize;
         let col = (pos % BUFFER_WIDTH as u16) as usize;

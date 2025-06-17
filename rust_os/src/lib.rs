@@ -8,11 +8,19 @@ pub mod vga_buffer;
 
 use core::panic::PanicInfo;
 use crate::printk::printk::LogLevel;
+use crate::drivers::keyboard;
 
 #[no_mangle]
 pub extern "C" fn kernel_main() -> ! {
     printk!(LogLevel::Info,"Starting Kernel...\n");
-    loop {}
+    // Init keyboard
+    keyboard::init_keyboard();
+    loop {
+        // Poll keyboard for input
+        if let Some(key) = keyboard::poll_keyboard() {
+            printk!(LogLevel::Info, "{}", key);
+        } 
+    }
 }
 
 #[panic_handler]
