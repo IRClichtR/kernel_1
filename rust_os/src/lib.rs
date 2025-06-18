@@ -17,9 +17,47 @@ pub extern "C" fn kernel_main() -> ! {
     keyboard::init_keyboard();
     loop {
         // Poll keyboard for input
-        if let Some(key) = keyboard::poll_keyboard() {
-            printk!(LogLevel::Default, "{}", key);
-        } 
+        if let Some(key_event) = keyboard::poll_keyboard() {
+            match key_event {
+                // chars
+                keyboard::KeyEvents ::Character(c) => {
+                    printk!(LogLevel::Info, "Key pressed: '{}'\n", c);
+                }
+                // special keys
+                keyboard::KeyEvents::Special(special_key) => {
+                    match special_key {
+                        keyboard::KeyEvents::ArrowUp => {
+                            keyboard::move_cursor_up();
+                            printk!(LogLevel::Info, "Arrow Up pressed\n");
+                        }
+                        keyboard::KeyEvents::ArrowDown => {
+                            keyboard::move_cursor_down();
+                            printk!(LogLevel::Info, "Arrow Down pressed\n");
+                        }
+                        keyboard::KeyEvents::ArrowLeft => {
+                            keyboard::move_cursor_left();
+                            printk!(LogLevel::Info, "Arrow Left pressed\n");
+                        }
+                        keyboard::KeyEvents::ArrowRight => {
+                            keyboard::move_cursor_right();
+                            printk!(LogLevel::Info, "Arrow Right pressed\n");
+                        }
+                        keyboard::KeyEvents::Home => {
+                            keyboard::move_cursor_home();
+                            printk!(LogLevel::Info, "Home pressed\n");
+                        }
+                        keyboard::KeyEvents::End => {
+                            keyboard::move_cursor_end();
+                            printk!(LogLevel::Info, "End pressed\n");
+                        }
+                        keyboard::KeyEvents::BackSpace => {
+                            keyboard::handle_backspace();
+                            printk!(LogLevel::Info, "Backspace pressed\n");
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
