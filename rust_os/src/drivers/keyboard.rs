@@ -1,7 +1,7 @@
 use crate::arch::x86::port::inb;
 use crate::printk;
 use crate::printk::printk::LogLevel;
-use crate::vga_buffer::vga_buffer::WRITER;
+use crate::vga_buffer::vga_buffer::{WRITER, BUFFER_HEIGHT, BUFFER_WIDTH};
 
 // keyboard ports
 const KEYBOARD_DATA_PORT: u16 = 0x60;
@@ -75,7 +75,7 @@ pub fn keyboard_has_data() -> bool {
     }
 }
 
-pub fn poll_keyboard() -> Option<char> {
+pub fn poll_keyboard() -> Option<KeyEvents> {
     if !keyboard_has_data() {
         return None;
     }
@@ -86,7 +86,7 @@ pub fn poll_keyboard() -> Option<char> {
     }
 }
 
-pub fn handle_scancode(scancode: u8) -> Option<char> {
+pub fn handle_scancode(scancode: u8) -> Option<KeyEvents> {
     unsafe {
         if scancode == EXTENDED_KEY_PREFIX {
             WAIT_FOR_EXTENDED = true;
@@ -99,8 +99,7 @@ pub fn handle_scancode(scancode: u8) -> Option<char> {
         let key_released = scancode & 0x80 != 0;
         let key_code = scancode & 0x7F;
 
-        if key_code == scancode & 0x80 {
-            // Handle extended keys (like arrow keys)
+        if is_extended && !key_released {
             return match key_code {
                 0x48 => Some(KeyEvents::ArrowUp),    // Up arrow
                 0x50 => Some(KeyEvents::ArrowDown),  // Down arrow
@@ -112,7 +111,7 @@ pub fn handle_scancode(scancode: u8) -> Option<char> {
             };
         }
 
-        if match key_code {
+        match key_code {
             0x2A | 0x36 => { // Shift keys
                 SHIFT_PRESSED = !key_released;
                 return None;
@@ -125,9 +124,7 @@ pub fn handle_scancode(scancode: u8) -> Option<char> {
                 ALT_PRESSED = !key_released;
                 return None;
             }
-            _ => false, // Other keys
-        } {
-            return None; // Ignore modifier keys
+            _ => {}
         }
 
         if key_released {
@@ -175,7 +172,7 @@ pub fn handle_scancode(scancode: u8) -> Option<char> {
                     _ => ascii,
                 };
             }
-            Some(ascii as char)            
+            Some(KeyEvents::Character(ascii as char))
         } else {
             None // Invalid scancode
         }
@@ -187,57 +184,55 @@ pub fn handle_scancode(scancode: u8) -> Option<char> {
 //=====================================================================================================================================
 
 pub fn move_cursor_up() {
-    WRITER.lock();
-    let row = WRITER.get_row();
+    let mut writer = WRITER.lock();
+    let row = writer.get_row();
     if row > 0 {
-        WRITER.set_row(row - 1);
+        writer.set_row(row - 1);
     }
 }
 
 pub fn move_cursor_down() {
-    WRITER.lock();
-    let row = WRITER.get_row();
-    if row < WRITER.get_buffer().height - 1 {
-        WRITER.set_row(row + 1);
+    let mut writer = WRITER.lock();
+    let row = writer.get_row();
+    if row < BUFFER_HEIGHT - 1 {
+        writer.set_row(row + 1);
     }
 }
 
 pub fn move_cursor_left() {
-    WRITER.lock();
-    let col = WRITER.get_col();
+    let mut writer = WRITER.lock();
+    let col = writer.get_col();
     if col > 0 {
-        WRITER.set_col(col - 1);
+        writer.set_col(col - 1);
     }
 }
 
 pub fn move_cursor_right() {
-    WRITER.lock();
-    let col = WRITER.get_col();
-    if col < WRITER.get_buffer().width - 1 {
-        WRITER.set_col(col + 1);
+    let mut writer = WRITER.lock();
+    let col = writer.get_col();
+    if col < BUFFER_WIDTH - 1 {
+        writer.set_col(col + 1);
     }
 }
 
 pub fn write_at_cursor(c: char) {
-    WRITER.lock();
-    WRITER.write_byte(c as u8);
+    let mut writer = WRITER.lock();
+    writer.write_byte(c as u8);
 }
 
 pub fn move_cursor_home() {
-    WRITER.lock();
-    WRITER.set_cursor_position(0, 0);
+    let mut writer = WRITER.lock();
+    writer.set_cursor_position(0, 0);
 }
 
 pub fn move_cursor_end() {
-    WRITER.lock();
-    let last_row = WRITER.get_buffer().height - 1;
-    let last_col = WRITER.get_buffer().width - 1;
-    WRITER.set_cursor_position(last_row, last_col);
+    let mut writer = WRITER.lock();
+    writer.set_cursor_position(BUFFER_HEIGHT - 1, BUFFER_WIDTH - 1);
 }
 
 pub fn handle_backspace() {
-    WRITER.lock();
+    let mut writer = WRITER.lock();
     move_cursor_left();
-    WRITER.write_byte(b' '); // Write a space to clear the character
+    writer.write_byte(b' '); // Write a space to clear the character
     move_cursor_left(); // Move cursor back to the left after writing space
 }

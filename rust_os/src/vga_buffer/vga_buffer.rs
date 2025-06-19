@@ -10,8 +10,8 @@ struct ScreenChar {
     color_code: u8,
 }
 
-const BUFFER_HEIGHT: usize = 25;
-const BUFFER_WIDTH: usize = 80;
+pub const BUFFER_HEIGHT: usize = 25;
+pub const BUFFER_WIDTH: usize = 80;
 
 #[repr(transparent)]
 struct Buffer {
@@ -82,6 +82,16 @@ impl Writer {
         }
     }    
 
+    pub fn set_row(&mut self, row: usize) {
+        self.row_position = row.min(BUFFER_HEIGHT - 1);
+        self.set_cursor_position(self.row_position, self.column_position);
+    }
+
+    pub fn set_col(&mut self, col: usize) {
+        self.column_position = col.min(BUFFER_WIDTH - 1);
+        self.set_cursor_position(self.row_position, self.column_position);
+    }
+
     pub fn move_cursor(&mut self, row: usize, col: usize) {
         self.row_position = row.min(BUFFER_HEIGHT - 1);
         self.column_position = col.min(BUFFER_WIDTH - 1);
@@ -125,7 +135,7 @@ impl Writer {
         }
     }
 
-    fn new_line(&mut self) {
+    pub fn new_line(&mut self) {
         if self.row_position < BUFFER_HEIGHT - 1 {
             self.row_position += 1;
         } else {
