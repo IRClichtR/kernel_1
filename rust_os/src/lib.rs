@@ -43,8 +43,8 @@ pub extern "C" fn kernel_main() -> ! {
                 }
             }
             
-            // Switch back to screen 0
-            manager.switch_screen(0);
+            // // Switch back to screen 0
+            // manager.switch_screen(0);
         }
     }
     
