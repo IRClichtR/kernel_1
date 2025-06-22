@@ -52,6 +52,7 @@ DOCKER_BIN_IMAGE := $(NAME)-buildenv
 DOCKER_BIN_DIR := $(TOOLS_DIR)/bin/env
 DOCKER_BIN_CMD := docker run \
   --name $(DOCKER_CONTAINER_NAME_BIN) --rm \
+  --platform linux/amd64 \
   -v $(CURDIR):/project \
   -w /project \
   $(DOCKER_BIN_IMAGE)
@@ -60,6 +61,7 @@ DOCKER_ISO_IMAGE := $(NAME)-isoenv
 DOCKER_ISO_DIR := $(TOOLS_DIR)/iso/env
 DOCKER_ISO_CMD := docker run \
   --name $(DOCKER_CONTAINER_NAME_ISO) --rm \
+  --platform linux/amd64 \
   -v $(CURDIR):/project \
   -w /project \
   $(DOCKER_ISO_IMAGE)
@@ -81,29 +83,30 @@ $(BUILD_OBJ) $(BUILD_BIN) $(DIST_DIR):
 # Main kernel build
 $(KERNEL_BIN): $(BOOT_OBJ) $(KERNEL_OBJ) $(LINKER) | $(BUILD_BIN)
 	@echo "==> Linking kernel binary"
-	$(LD) $(LDFLAGS) -o $@ $(BOOT_OBJ) $(KERNEL_OBJ)
+	$(DOCKER_BIN_CMD) $(LD) $(LDFLAGS) -o $@ $(BOOT_OBJ) $(KERNEL_OBJ)
 	@echo "==> Kernel binary created at $@"
 
 # Assembly compilation
-$(BOOT_OBJ): $(BOOT_SRC) | $(BUILD_OBJ)
-	@echo "==> Assembling boot code"
-	$(NASM) $(NASMFLAGS) $< -o $@
+$(BOOT_OBJ): $(BOOT_SRC) docker-bin-image | $(BUILD_OBJ)
+	@echo "==> Assembling boot code using Docker"
+	$(DOCKER_BIN_CMD) nasm $(NASMFLAGS) $(BOOT_SRC) -o $(BOOT_OBJ)
+	@echo "==> Boot object created at $@"
 
 # Rust compilation
 $(KERNEL_OBJ): $(KERNEL_SRC) $(TARGET_SPEC) | $(BUILD_OBJ)
 	@echo "==> Compiling Rust kernel"
 	$(DOCKER_BIN_CMD) cargo +nightly build --target $(TARGET_SPEC) --release
-	$(DOCKER_BUILD_CMD) cp target/$(ARCH)-unknown-none/release/lib$(NAME).a $@
+	$(DOCKER_BIN_CMD) cp target/$(ARCH)-unknown-none/release/lib$(NAME).a $@
 	@echo "==> Kernel object created at $@"
 
 #==== Build Docker Images ====#
 docker-bin-image:
 	@echo "==> Building Docker image for .bin creation"
-	docker build $(DOCKER_BIN_DIR) -t $(DOCKER_BIN_IMAGE)
+	docker build $(DOCKER_BIN_DIR) --platform linux/amd64 -t $(DOCKER_BIN_IMAGE)
 
 docker-iso-image:
 	@echo "==> Building Docker image for ISO creation"
-	docker build $(DOCKER_ISO_DIR) -t $(DOCKER_ISO_IMAGE)
+	docker build $(DOCKER_ISO_DIR) --platform linux/amd64 -t $(DOCKER_ISO_IMAGE)
 
 # #==== ISO Creation (Docker-based) ====#
 # .PHONY: iso

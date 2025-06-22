@@ -5,14 +5,49 @@ pub mod drivers;
 pub mod printk;
 pub mod arch;
 pub mod vga_buffer;
+pub mod screen;
+pub mod kspin_lock;
 
 use core::panic::PanicInfo;
+use core::fmt::Write;
 use crate::printk::printk::LogLevel;
 use crate::drivers::keyboard;
+use crate::screen::global::{init_screen_manager, screen_manager};
+use crate::screen::screen::Writer;
 
 #[no_mangle]
 pub extern "C" fn kernel_main() -> ! {
     printk!(LogLevel::Info,"Starting Kernel...\n");
+    
+    init_screen_manager();
+    
+    // Test screen management
+    {
+        let mut manager = screen_manager().lock();
+        
+        // Create a second screen
+        if let Some(screen_id) = manager.create_screen() {
+            printk!(LogLevel::Info, "Created screen {}\n", screen_id);
+            
+            // Write to screen 0
+            if let Some(screen) = &mut manager.screens[0] {
+                let mut writer = Writer::new(screen);
+                write!(writer, "Hello from screen 0\n").unwrap();
+            }
+            
+            // Switch to screen 1 and write
+            if manager.switch_screen(1) {
+                if let Some(screen) = &mut manager.screens[1] {
+                    let mut writer = Writer::new(screen);
+                    write!(writer, "Hello from screen 1\n").unwrap();
+                }
+            }
+            
+            // Switch back to screen 0
+            manager.switch_screen(0);
+        }
+    }
+    
     // Init keyboard
     keyboard::init_keyboard();
     loop {
