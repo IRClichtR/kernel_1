@@ -37,7 +37,6 @@ const SCANCODE_TO_ASCII: [u8; 128] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 ];
 
-
 #[derive(Clone, Copy, Debug)]
 pub enum KeyEvents {
     Character(char),
@@ -46,6 +45,7 @@ pub enum KeyEvents {
     ArrowLeft,
     ArrowRight,
     BackSpace,
+    Delete,
     Enter,
     Home,
     End
@@ -61,7 +61,7 @@ static mut WAIT_FOR_EXTENDED: bool = false;
 pub fn init_keyboard() {
     unsafe {
         while keyboard_has_data() {
-            let _ = inb(KEYBOARD_DATA_PORT); // Clear any existing data in the buffer
+            let _ = inb(KEYBOARD_DATA_PORT);
         }
         WAIT_FOR_EXTENDED = false;
     }
@@ -107,6 +107,7 @@ pub fn handle_scancode(scancode: u8) -> Option<KeyEvents> {
                 0x4D => Some(KeyEvents::ArrowRight), // Right arrow
                 0x47 => Some(KeyEvents::Home),       // Home
                 0x4F => Some(KeyEvents::End),        // End
+                0x53 => Some(KeyEvents::Delete),     // Delete key (E0 53)
                 _ => None,
             };
         }
@@ -232,7 +233,26 @@ pub fn move_cursor_end() {
 
 pub fn handle_backspace() {
     let mut writer = WRITER.lock();
-    move_cursor_left();
-    writer.write_byte(b' '); // Write a space to clear the character
-    move_cursor_left(); // Move cursor back to the left after writing space
+    let col = writer.get_col();
+    if col > 0 {
+        writer.set_col(col - 1);
+        writer.write_byte(b' '); // Write a space to clear the character
+        writer.set_col(col - 1); // Move cursor back to the position
+    }
+}
+
+// New function to handle delete key
+pub fn handle_delete() {
+    let mut writer = WRITER.lock();
+    let current_col = writer.get_col();
+    let current_row = writer.get_row();
+    
+    // Check if we're not at the end of the line
+    if current_col < BUFFER_WIDTH - 1 {
+        // Simple approach: just clear the character at current position
+        // This is a basic implementation - you might want to enhance it
+        // to shift characters left for a more sophisticated text editor
+        writer.write_byte(b' '); // Clear current character
+        writer.set_col(current_col); // Reset cursor to original position
+    }
 }
