@@ -27,14 +27,14 @@ pub extern "C" fn kernel_main() -> ! {
             // Write directly to screen 0
             if let Some(screen) = &mut manager.screens[0] {
                 let mut writer = Writer::new(screen);
-                write!(writer, "Hello from screen 0\n").unwrap();
+                write!(writer, "Screen 0\n").unwrap();
             }
             
             // Switch to screen 1 and write
             if manager.switch_screen(1) {
                 if let Some(screen) = &mut manager.screens[1] {
                     let mut writer = Writer::new(screen);
-                    write!(writer, "Hello from screen 1\n").unwrap();
+                    write!(writer, "Screen 1\n").unwrap();
                 }
             }
             
@@ -82,18 +82,25 @@ pub extern "C" fn kernel_main() -> ! {
                 }
                 keyboard::KeyEvents::Enter => {
                     vga_buffer::WRITER.lock().new_line();
-                    printk!(LogLevel::Info, "What happens?.\n");
                 }
                 // screen switching
                 keyboard::KeyEvents::SwitchScreenLeft => {
                     let mut manager = screen_manager().lock();
                     let current_screen = manager.active_screen_id;
                     let new_screen = if current_screen == 0 { 1 } else { 0 };
+                    if !manager.switch_screen(new_screen) {
+                        // write!(writer, "Coucou\n").unwrap();
+                        printk!(LogLevel::Critical, "Error switching to screen {}\n", new_screen);
+                    }
                 }
                 keyboard::KeyEvents::SwitchScreenRight => {
                     let mut manager = screen_manager().lock();
                     let current_screen = manager.active_screen_id;
                     let new_screen = if current_screen == 0 { 1 } else { 0 };
+                    if !manager.switch_screen(new_screen) {
+                        printk!(LogLevel::Critical, "Error switching to screen {}\n", new_screen);
+                        // write!(writer, "Coucou\n").unwrap();
+                    }
                 }
             }
         }
