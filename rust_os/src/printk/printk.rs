@@ -58,10 +58,10 @@ impl Write for Logger {
     fn write_str(&mut self, s: &str) -> Result {
         // Get the screen manager and write to the target screen
         let mut manager = screen_manager().lock();
-        let target_screen = get_printk_screen();
+        let target_screen_id = get_printk_screen();
         
         // Write to the target screen using the screen manager
-        if let Some(target_screen) = &mut manager.screens[target_screen] {
+        if let Some(target_screen) = &mut manager.screens[target_screen_id] {
             let mut writer = Writer::new(target_screen);
             
             // Write the log level prefix
@@ -75,7 +75,7 @@ impl Write for Logger {
             }
             
             // Only update physical display if this is the active screen
-            if target_screen == manager.active_screen_id {
+            if target_screen_id == manager.active_screen_id {
                 manager.flush_to_physical();
                 manager.update_cursor();
             }
