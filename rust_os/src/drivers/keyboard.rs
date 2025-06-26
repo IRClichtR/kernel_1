@@ -48,7 +48,9 @@ pub enum KeyEvents {
     Delete,
     Enter,
     Home,
-    End
+    End,
+    SwitchScreenLeft,
+    SwitchScreenRight
 }
 
 // Global state for modifier keys
@@ -103,8 +105,20 @@ pub fn handle_scancode(scancode: u8) -> Option<KeyEvents> {
             return match key_code {
                 0x48 => Some(KeyEvents::ArrowUp),    // Up arrow
                 0x50 => Some(KeyEvents::ArrowDown),  // Down arrow
-                0x4B => Some(KeyEvents::ArrowLeft),  // Left arrow
-                0x4D => Some(KeyEvents::ArrowRight), // Right arrow
+                0x4B => {
+                    if CTRL_PRESSED {
+                        Some(KeyEvents::SwitchScreenLeft)  // Ctrl+Left = switch screen left
+                    } else {
+                        Some(KeyEvents::ArrowLeft)  // Left arrow
+                    }
+                }
+                0x4D => {
+                    if CTRL_PRESSED {
+                        Some(KeyEvents::SwitchScreenRight) // Ctrl+Right = switch screen right
+                    } else {
+                        Some(KeyEvents::ArrowRight) // Right arrow
+                    }
+                }
                 0x47 => Some(KeyEvents::Home),       // Home
                 0x4F => Some(KeyEvents::End),        // End
                 0x53 => Some(KeyEvents::Delete),     // Delete key (E0 53)

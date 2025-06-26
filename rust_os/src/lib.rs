@@ -41,8 +41,8 @@ pub extern "C" fn kernel_main() -> ! {
         }
     }
     
-    // // Init keyboard
-    // keyboard::init_keyboard();
+    // Init keyboard
+    keyboard::init_keyboard();
     
     loop {
         // Poll keyboard for input
@@ -80,6 +80,23 @@ pub extern "C" fn kernel_main() -> ! {
                 }
                 keyboard::KeyEvents::Enter => {
                     vga_buffer::WRITER.lock().new_line();
+                }
+                // screen switching
+                keyboard::KeyEvents::SwitchScreenLeft => {
+                    let mut manager = screen_manager().lock();
+                    let current_screen = manager.active_screen_id;
+                    let new_screen = if current_screen == 0 { 1 } else { 0 };
+                    if manager.switch_screen(new_screen) {
+                        printk!(LogLevel::Info, "Switched to screen {}\n", new_screen);
+                    }
+                }
+                keyboard::KeyEvents::SwitchScreenRight => {
+                    let mut manager = screen_manager().lock();
+                    let current_screen = manager.active_screen_id;
+                    let new_screen = if current_screen == 0 { 1 } else { 0 };
+                    if manager.switch_screen(new_screen) {
+                        printk!(LogLevel::Info, "Switched to screen {}\n", new_screen);
+                    }
                 }
             }
         }
