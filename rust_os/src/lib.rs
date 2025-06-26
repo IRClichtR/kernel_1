@@ -12,23 +12,26 @@ use crate::printk::printk::LogLevel;
 use crate::drivers::keyboard;
 use crate::screen::global::{init_screen_manager, screen_manager};
 use crate::screen::screen::Writer;
+use crate::printk::printk::{set_printk_screen, get_printk_screen};
 
 #[no_mangle]
 pub extern "C" fn kernel_main() -> ! {
-    printk!(LogLevel::Info,"Starting Kernel...\n");
     init_screen_manager();
     
-    // Test screen management
+    // Test basic screen functionality
     {
         let mut manager = screen_manager().lock();
+        
         // Create a second screen
         if let Some(screen_id) = manager.create_screen() {
             printk!(LogLevel::Info, "Created screen {}\n", screen_id);
-            // Write to screen 0
+            
+            // Write directly to screen 0
             if let Some(screen) = &mut manager.screens[0] {
                 let mut writer = Writer::new(screen);
                 write!(writer, "Hello from screen 0\n").unwrap();
             }
+            
             // Switch to screen 1 and write
             if manager.switch_screen(1) {
                 if let Some(screen) = &mut manager.screens[1] {
@@ -36,8 +39,10 @@ pub extern "C" fn kernel_main() -> ! {
                     write!(writer, "Hello from screen 1\n").unwrap();
                 }
             }
+            
             // Switch back to screen 0
-            manager.switch_screen(1);
+            manager.switch_screen(0);
+            printk!(LogLevel::Info, "Back to screen 0\n");
         }
     }
     

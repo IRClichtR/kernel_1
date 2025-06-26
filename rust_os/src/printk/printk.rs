@@ -1,5 +1,6 @@
 use core::fmt::{Write, Result};
-use crate::vga_buffer::vga_buffer::WRITER;
+use crate::screen::global::screen_manager;
+use crate::screen::screen::Writer;
 
 #[allow(dead_code)]
 #[derive(Copy, Clone)]
@@ -44,14 +45,29 @@ impl Logger {
 
 impl Write for Logger {
     fn write_str(&mut self, s: &str) -> Result {
-        // Acquire lock on the global writer
-        let mut writer = WRITER.lock();
+        // Get the screen manager and write to screen 0 only
+        let mut manager = screen_manager().lock();
         
-        // Write the log level prefix
-        writer.write_string(self.level.as_str());
-        
-        // Write the actual message
-        writer.write_string(s);
+        // Write to screen 0 using the screen manager
+        if let Some(screen_0) = &mut manager.screens[0] {
+            let mut writer = Writer::new(screen_0);
+            
+            // Write the log level prefix
+            for byte in self.level.as_str().bytes() {
+                writer.write_byte(byte);
+            }
+            
+            // Write the actual message
+            for byte in s.bytes() {
+                writer.write_byte(byte);
+            }
+            
+            // Only update physical display if screen 0 is active
+            if manager.active_screen_id == 0 {
+                manager.flush_to_physical();
+                manager.update_cursor();
+            }
+        }
         
         Ok(())
     }
