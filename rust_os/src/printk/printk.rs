@@ -1,5 +1,17 @@
 use core::fmt::{Write, Result};
-use crate::vga_buffer::vga_buffer::WRITER;
+use core::sync::atomic::{AtomicUsize, Ordering};
+use crate::screen::global::screen_manager;
+use crate::screen::screen::Writer;
+
+static PRINTK_TARGET_SCREEN: AtomicUsize = AtomicUsize::new(0);
+
+pub fn set_printk_screen(screen_id: usize) {
+    PRINTK_TARGET_SCREEN.store(screen_id, Ordering::Relaxed);
+}
+
+pub fn get_printk_screen() -> usize {
+    PRINTK_TARGET_SCREEN.load(Ordering::Relaxed)
+}
 
 #[allow(dead_code)]
 #[derive(Copy, Clone)]
@@ -44,14 +56,30 @@ impl Logger {
 
 impl Write for Logger {
     fn write_str(&mut self, s: &str) -> Result {
-        // Acquire lock on the global writer
-        let mut writer = WRITER.lock();
+        // Get the screen manager and write to the target screen
+        let mut manager = screen_manager().lock();
+        let target_screen = get_printk_screen();
         
-        // Write the log level prefix
-        writer.write_string(self.level.as_str());
-        
-        // Write the actual message
-        writer.write_string(s);
+        // Write to the target screen using the screen manager
+        if let Some(target_screen) = &mut manager.screens[target_screen] {
+            let mut writer = Writer::new(target_screen);
+            
+            // Write the log level prefix
+            for byte in self.level.as_str().bytes() {
+                writer.write_byte(byte);
+            }
+            
+            // Write the actual message
+            for byte in s.bytes() {
+                writer.write_byte(byte);
+            }
+            
+            // Only update physical display if this is the active screen
+            if target_screen == manager.active_screen_id {
+                manager.flush_to_physical();
+                manager.update_cursor();
+            }
+        }
         
         Ok(())
     }
