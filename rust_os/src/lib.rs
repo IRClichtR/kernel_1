@@ -12,7 +12,6 @@ use crate::printk::printk::LogLevel;
 use crate::drivers::keyboard;
 use crate::screen::global::{init_screen_manager, screen_manager};
 use crate::screen::screen::Writer;
-use crate::printk::printk::{set_printk_screen, get_printk_screen};
 
 #[no_mangle]
 pub extern "C" fn kernel_main() -> ! {
@@ -24,7 +23,6 @@ pub extern "C" fn kernel_main() -> ! {
         
         // Create a second screen
         if let Some(screen_id) = manager.create_screen() {
-            printk!(LogLevel::Info, "Created screen {}\n", screen_id);
             
             // Write directly to screen 0
             if let Some(screen) = &mut manager.screens[0] {
@@ -42,7 +40,6 @@ pub extern "C" fn kernel_main() -> ! {
             
             // Switch back to screen 0
             manager.switch_screen(0);
-            printk!(LogLevel::Info, "Back to screen 0\n");
         }
     }
     
@@ -85,23 +82,18 @@ pub extern "C" fn kernel_main() -> ! {
                 }
                 keyboard::KeyEvents::Enter => {
                     vga_buffer::WRITER.lock().new_line();
+                    printk!(LogLevel::Info, "What happens?.\n");
                 }
                 // screen switching
                 keyboard::KeyEvents::SwitchScreenLeft => {
                     let mut manager = screen_manager().lock();
                     let current_screen = manager.active_screen_id;
                     let new_screen = if current_screen == 0 { 1 } else { 0 };
-                    if manager.switch_screen(new_screen) {
-                        printk!(LogLevel::Info, "Switched to screen {}\n", new_screen);
-                    }
                 }
                 keyboard::KeyEvents::SwitchScreenRight => {
                     let mut manager = screen_manager().lock();
                     let current_screen = manager.active_screen_id;
                     let new_screen = if current_screen == 0 { 1 } else { 0 };
-                    if manager.switch_screen(new_screen) {
-                        printk!(LogLevel::Info, "Switched to screen {}\n", new_screen);
-                    }
                 }
             }
         }
