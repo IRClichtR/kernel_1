@@ -18,7 +18,7 @@ use crate::printk::printk::{set_printk_screen, get_printk_screen};
 pub extern "C" fn kernel_main() -> ! {
     init_screen_manager();
     
-    // Test screen management
+    // Test basic screen functionality
     {
         let mut manager = screen_manager().lock();
         
@@ -26,25 +26,22 @@ pub extern "C" fn kernel_main() -> ! {
         if let Some(screen_id) = manager.create_screen() {
             printk!(LogLevel::Info, "Created screen {}\n", screen_id);
             
-            // Set printk to write to screen 0
-            set_printk_screen(0);
-            printk!(LogLevel::Info, "This message goes to screen 0\n");
+            // Write directly to screen 0
+            if let Some(screen) = &mut manager.screens[0] {
+                let mut writer = Writer::new(screen);
+                write!(writer, "Hello from screen 0\n").unwrap();
+            }
             
-            // Switch to screen 1 and set printk target
+            // Switch to screen 1 and write
             if manager.switch_screen(1) {
-                set_printk_screen(1);
-                printk!(LogLevel::Info, "This message goes to screen 1\n");
-                
-                // Write directly to screen 1
                 if let Some(screen) = &mut manager.screens[1] {
                     let mut writer = Writer::new(screen);
-                    write!(writer, "Direct write to screen 1\n").unwrap();
+                    write!(writer, "Hello from screen 1\n").unwrap();
                 }
             }
             
             // Switch back to screen 0
             manager.switch_screen(0);
-            set_printk_screen(0);
             printk!(LogLevel::Info, "Back to screen 0\n");
         }
     }
