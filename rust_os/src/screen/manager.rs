@@ -43,6 +43,22 @@ impl ScreenManager {
         screen_id < MAX_SCREENS && self.screens[screen_id].is_some()
     }
 
+    /// Clear a specific screen
+    pub fn clear_screen(&mut self, screen_id: usize) -> bool {
+        if screen_id < MAX_SCREENS {
+            if let Some(screen) = &mut self.screens[screen_id] {
+                screen.clear();
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Clear the currently active screen
+    pub fn clear_active_screen(&mut self) -> bool {
+        self.clear_screen(self.active_screen_id)
+    }
+
     /// Write data directly to the currently active screen
     pub fn write_to_active_screen(&mut self, data: &str) -> bool {
         if let Some(active_screen) = &mut self.screens[self.active_screen_id] {
@@ -125,6 +141,9 @@ impl ScreenManager {
 
     pub fn switch_screen(&mut self, screen_id: usize) -> bool {
         if screen_id < MAX_SCREENS && self.screens[screen_id].is_some() {
+            // Clear the screen we're switching to
+            self.clear_screen(screen_id);
+            
             self.active_screen_id = screen_id;
             self.flush_to_physical();
             self.update_cursor();

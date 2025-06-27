@@ -50,57 +50,11 @@ pub extern "C" fn kernel_main() -> ! {
     printk!(LogLevel::Info, "Test 1: Writing to screen 0 (default)\n");
     printk!(LogLevel::Warn, "This warning should appear on screen 0\n");
     printk!(LogLevel::Error, "This error should appear on screen 0\n");
+    printk!(LogLevel::Debug, "Debug message on screen 0\n");
+    printk!(LogLevel::Notice, "Notice message on screen 0\n");
+    printk!("Default level message on screen 0\n");
     
-    // Test 2: Switch to screen 1 and test printk
-    {
-        let mut manager = screen_manager().lock();
-        if manager.switch_screen(1) {
-            printk!(LogLevel::Info, "Test 2: Switched to screen 1\n");
-            printk!(LogLevel::Warn, "This warning should appear on screen 1\n");
-            printk!(LogLevel::Error, "This error should appear on screen 1\n");
-            printk!(LogLevel::Debug, "Debug message on screen 1\n");
-        }
-    }
-    
-    // Test 3: Switch back to screen 0 and test printk
-    {
-        let mut manager = screen_manager().lock();
-        if manager.switch_screen(0) {
-            printk!(LogLevel::Info, "Test 3: Back to screen 0\n");
-            printk!(LogLevel::Notice, "Notice: printk should work on screen 0 again\n");
-            printk!(LogLevel::Debug, "Debug message on screen 0\n");
-        }
-    }
-    
-    // Test 4: Multiple rapid screen switches with printk
-    for i in 0..3 {
-        {
-            let mut manager = screen_manager().lock();
-            if manager.switch_screen(1) {
-                printk!(LogLevel::Info, "Rapid test {}: Screen 1\n", i);
-            }
-        }
-        
-        {
-            let mut manager = screen_manager().lock();
-            if manager.switch_screen(0) {
-                printk!(LogLevel::Info, "Rapid test {}: Screen 0\n", i);
-            }
-        }
-    }
-    
-    // Test 5: Test all log levels on current screen
-    printk!(LogLevel::Emergency, "Emergency message\n");
-    printk!(LogLevel::Alert, "Alert message\n");
-    printk!(LogLevel::Critical, "Critical message\n");
-    printk!(LogLevel::Error, "Error message\n");
-    printk!(LogLevel::Warn, "Warning message\n");
-    printk!(LogLevel::Notice, "Notice message\n");
-    printk!(LogLevel::Info, "Info message\n");
-    printk!(LogLevel::Debug, "Debug message\n");
-    printk!("Default level message\n");
-    
-    printk!(LogLevel::Info, "=== Screen-Aware printk Tests Complete ===\n");
+    printk!(LogLevel::Info, "=== Screen-Aware printk Test Complete ===\n");
     printk!(LogLevel::Info, "Use Ctrl+Alt+Left/Right to switch screens\n");
     printk!(LogLevel::Info, "All printk output should appear on the active screen\n");
     
