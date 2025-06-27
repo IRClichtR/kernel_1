@@ -104,9 +104,7 @@ pub extern "C" fn kernel_main() -> ! {
                     let current_screen = manager.active_screen_id;
                     let new_screen = if current_screen == 0 { 1 } else { 0 };
                     if !manager.switch_screen(new_screen) {
-                        printk!(LogLevel::Critical, "Error switching to screen {}\n", new_screen);
-                    } else {
-                        printk!(LogLevel::Info, "Switched to screen {}\n", new_screen);
+                       //exit
                     }
                 }
                 keyboard::KeyEvents::SwitchScreenRight => {
@@ -114,9 +112,7 @@ pub extern "C" fn kernel_main() -> ! {
                     let current_screen = manager.active_screen_id;
                     let new_screen = if current_screen == 0 { 1 } else { 0 };
                     if !manager.switch_screen(new_screen) {
-                        printk!(LogLevel::Critical, "Error switching to screen {}\n", new_screen);
-                    } else {
-                        printk!(LogLevel::Info, "Switched to screen {}\n", new_screen);
+                       // exit
                     }
                 }
             }
