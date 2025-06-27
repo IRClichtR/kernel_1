@@ -28,6 +28,64 @@ impl ScreenManager {
         self.screens[self.active_screen_id].as_mut().unwrap()
     }
 
+    /// Get the current active screen ID in a thread-safe manner
+    pub fn get_active_screen_id(&self) -> usize {
+        self.active_screen_id
+    }
+
+    /// Check if a screen is currently active
+    pub fn is_screen_active(&self, screen_id: usize) -> bool {
+        screen_id < MAX_SCREENS && self.active_screen_id == screen_id
+    }
+
+    /// Check if a screen exists and is available
+    pub fn is_screen_available(&self, screen_id: usize) -> bool {
+        screen_id < MAX_SCREENS && self.screens[screen_id].is_some()
+    }
+
+    /// Write data directly to the currently active screen
+    pub fn write_to_active_screen(&mut self, data: &str) -> bool {
+        if let Some(active_screen) = &mut self.screens[self.active_screen_id] {
+            use super::screen::Writer;
+            let mut writer = Writer::new(active_screen);
+            
+            for byte in data.bytes() {
+                writer.write_byte(byte);
+            }
+            
+            self.flush_to_physical();
+            self.update_cursor();
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Write data to a specific screen (for internal use)
+    pub fn write_to_screen(&mut self, screen_id: usize, data: &str) -> bool {
+        if screen_id < MAX_SCREENS {
+            if let Some(screen) = &mut self.screens[screen_id] {
+                use super::screen::Writer;
+                let mut writer = Writer::new(screen);
+                
+                for byte in data.bytes() {
+                    writer.write_byte(byte);
+                }
+                
+                // Only flush and update cursor if this is the active screen
+                if self.active_screen_id == screen_id {
+                    self.flush_to_physical();
+                    self.update_cursor();
+                }
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        }
+    }
+
     pub fn create_screen(&mut self) -> Option<usize> {
         for i in 0..MAX_SCREENS {
             if self.screens[i].is_none() {

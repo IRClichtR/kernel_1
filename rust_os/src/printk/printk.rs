@@ -45,12 +45,12 @@ impl Logger {
 
 impl Write for Logger {
     fn write_str(&mut self, s: &str) -> Result {
-        // Get the screen manager and write to screen 0 only
         let mut manager = screen_manager().lock();
+        let active_screen_id = manager.get_active_screen_id();
         
-        // Write to screen 0 using the screen manager
-        if let Some(screen_0) = &mut manager.screens[0] {
-            let mut writer = Writer::new(screen_0);
+        // Write to the currently active screen
+        if let Some(active_screen) = &mut manager.screens[active_screen_id] {
+            let mut writer = Writer::new(active_screen);
             
             // Write the log level prefix
             for byte in self.level.as_str().bytes() {
@@ -62,11 +62,9 @@ impl Write for Logger {
                 writer.write_byte(byte);
             }
             
-            // Only update physical display if screen 0 is active
-            if manager.active_screen_id == 0 {
-                manager.flush_to_physical();
-                manager.update_cursor();
-            }
+            // Always flush and update cursor for active screen
+            manager.flush_to_physical();
+            manager.update_cursor();
         }
         
         Ok(())
