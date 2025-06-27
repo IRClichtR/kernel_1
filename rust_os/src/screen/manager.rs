@@ -1,7 +1,7 @@
 use crate::arch::x86::port::outb;
 use super::screen::{ Buffer, Screen, BUFFER_HEIGHT, BUFFER_WIDTH };
 
-const MAX_SCREENS: usize = 2;
+const MAX_SCREENS: usize = 3;
 
 pub struct ScreenManager {
     pub screens: [Option<Screen>; MAX_SCREENS],
@@ -142,7 +142,7 @@ impl ScreenManager {
     pub fn switch_screen(&mut self, screen_id: usize) -> bool {
         if screen_id < MAX_SCREENS && self.screens[screen_id].is_some() {
             // Clear the screen we're switching to
-            self.clear_screen(screen_id);
+            // self.clear_screen(screen_id);
             
             self.active_screen_id = screen_id;
             self.flush_to_physical();

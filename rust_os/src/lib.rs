@@ -27,14 +27,14 @@ pub extern "C" fn kernel_main() -> ! {
             // Write directly to screen 0
             if let Some(screen) = &mut manager.screens[0] {
                 let mut writer = Writer::new(screen);
-                write!(writer, "Screen 0\n").unwrap();
+                write!(writer, "kernel logs\n").unwrap();
             }
             
             // Switch to screen 1 and write
             if manager.switch_screen(1) {
                 if let Some(screen) = &mut manager.screens[1] {
                     let mut writer = Writer::new(screen);
-                    write!(writer, "Screen 1\n").unwrap();
+                    write!(writer, "user console").unwrap();
                 }
             }
             
@@ -42,21 +42,6 @@ pub extern "C" fn kernel_main() -> ! {
             manager.switch_screen(0);
         }
     }
-    
-    // === PHASE 3: TESTING SCREEN-AWARE PRINTK ===
-    
-    // Test 1: printk on screen 0 (default)
-    printk!(LogLevel::Info, "=== Screen-Aware printk Test ===\n");
-    printk!(LogLevel::Info, "Test 1: Writing to screen 0 (default)\n");
-    printk!(LogLevel::Warn, "This warning should appear on screen 0\n");
-    printk!(LogLevel::Error, "This error should appear on screen 0\n");
-    printk!(LogLevel::Debug, "Debug message on screen 0\n");
-    printk!(LogLevel::Notice, "Notice message on screen 0\n");
-    printk!("Default level message on screen 0\n");
-    
-    printk!(LogLevel::Info, "=== Screen-Aware printk Test Complete ===\n");
-    printk!(LogLevel::Info, "Use Ctrl+Alt+Left/Right to switch screens\n");
-    printk!(LogLevel::Info, "All printk output should appear on the active screen\n");
     
     // Init keyboard
     keyboard::init_keyboard();
@@ -113,6 +98,8 @@ pub extern "C" fn kernel_main() -> ! {
                     let new_screen = if current_screen == 0 { 1 } else { 0 };
                     if !manager.switch_screen(new_screen) {
                        // exit
+                    } else {
+                        //printk!(LogLevel::Info, "All printk output should appear on the active screen\n");
                     }
                 }
             }
