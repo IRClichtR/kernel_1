@@ -83,6 +83,54 @@ impl Screen {
         self.row_position = row;
         self.column_position = col;
     }
+
+    /// Write a byte at a specific position without moving the cursor
+    pub fn write_byte_at(&mut self, row: usize, col: usize, byte: u8) {
+        if row < BUFFER_HEIGHT && col < BUFFER_WIDTH {
+            self.buffer.chars[row][col] = ScreenChar {
+                ascii_character: byte,
+                color_code: 0x0f,
+            };
+        }
+    }
+
+    /// Write a byte at the current cursor position and advance the cursor
+    pub fn write_byte(&mut self, byte: u8) {
+        if byte == b'\n' {
+            self.row_position += 1;
+            self.column_position = 0;
+        } else {
+            if self.row_position >= BUFFER_HEIGHT {
+                self.scroll_up();
+                self.row_position = BUFFER_HEIGHT - 1;
+            }
+
+            self.buffer.chars[self.row_position][self.column_position] =
+                ScreenChar {
+                    ascii_character: byte,
+                    color_code: 0x0f,
+                };
+
+            self.column_position += 1;
+            if self.column_position >= BUFFER_WIDTH {
+                self.column_position = 0;
+                self.row_position += 1;
+            }
+        }
+    }
+
+    /// Scroll the screen content up by one line
+    pub fn scroll_up(&mut self) {
+        for row in 1..BUFFER_HEIGHT {
+            self.buffer.chars[row - 1] = self.buffer.chars[row];
+        }
+
+        self.buffer.chars[BUFFER_HEIGHT - 1] =
+            [ScreenChar {
+                ascii_character: b' ',
+                color_code: 0x0f,
+            }; BUFFER_WIDTH];
+    }
 }
 
 pub struct Writer<'a> {
