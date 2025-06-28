@@ -84,7 +84,6 @@ impl Screen {
         self.column_position = col;
     }
 
-    /// Write a byte at a specific position without moving the cursor
     pub fn write_byte_at(&mut self, row: usize, col: usize, byte: u8) {
         if row < BUFFER_HEIGHT && col < BUFFER_WIDTH {
             self.buffer.chars[row][col] = ScreenChar {
@@ -94,7 +93,6 @@ impl Screen {
         }
     }
 
-    /// Write a byte at the current cursor position and advance the cursor
     pub fn write_byte(&mut self, byte: u8) {
         if byte == b'\n' {
             self.row_position += 1;
@@ -119,7 +117,6 @@ impl Screen {
         }
     }
 
-    /// Scroll the screen content up by one line
     pub fn scroll_up(&mut self) {
         for row in 1..BUFFER_HEIGHT {
             self.buffer.chars[row - 1] = self.buffer.chars[row];

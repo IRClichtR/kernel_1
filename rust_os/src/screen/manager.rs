@@ -28,22 +28,18 @@ impl ScreenManager {
         self.screens[self.active_screen_id].as_mut().unwrap()
     }
 
-    /// Get the current active screen ID in a thread-safe manner
     pub fn get_active_screen_id(&self) -> usize {
         self.active_screen_id
     }
 
-    /// Check if a screen is currently active
     pub fn is_screen_active(&self, screen_id: usize) -> bool {
         screen_id < MAX_SCREENS && self.active_screen_id == screen_id
     }
 
-    /// Check if a screen exists and is available
     pub fn is_screen_available(&self, screen_id: usize) -> bool {
         screen_id < MAX_SCREENS && self.screens[screen_id].is_some()
     }
 
-    /// Clear a specific screen
     pub fn clear_screen(&mut self, screen_id: usize) -> bool {
         if screen_id < MAX_SCREENS {
             if let Some(screen) = &mut self.screens[screen_id] {
@@ -54,12 +50,10 @@ impl ScreenManager {
         false
     }
 
-    /// Clear the currently active screen
     pub fn clear_active_screen(&mut self) -> bool {
         self.clear_screen(self.active_screen_id)
     }
 
-    /// Write data directly to the currently active screen
     pub fn write_to_active_screen(&mut self, data: &str) -> bool {
         if let Some(active_screen) = &mut self.screens[self.active_screen_id] {
             use super::screen::Writer;
@@ -77,7 +71,6 @@ impl ScreenManager {
         }
     }
 
-    /// Write data to a specific screen (for internal use)
     pub fn write_to_screen(&mut self, screen_id: usize, data: &str) -> bool {
         if screen_id < MAX_SCREENS {
             if let Some(screen) = &mut self.screens[screen_id] {
@@ -139,13 +132,11 @@ impl ScreenManager {
         }
     }
 
-    /// Get the current cursor position of the active screen
     pub fn get_cursor_position(&self) -> (usize, usize) {
         let active = self.get_active_screen();
         (active.row_position, active.column_position)
     }
 
-    /// Set the cursor position of the active screen
     pub fn set_cursor_position(&mut self, row: usize, col: usize) {
         if let Some(active_screen) = &mut self.screens[self.active_screen_id] {
             active_screen.set_cursor_position(row, col);
@@ -153,23 +144,10 @@ impl ScreenManager {
         }
     }
 
-    /// Debug method to print current screen and cursor information
-    pub fn debug_info(&self) {
-        let active = self.get_active_screen();
-        // This would need to be implemented with a print function
-        // For now, we'll just ensure cursor is properly positioned
-        self.update_cursor();
-    }
-
     pub fn switch_screen(&mut self, screen_id: usize) -> bool {
         if screen_id < MAX_SCREENS && self.screens[screen_id].is_some() {
-            // Switch to the new screen
             self.active_screen_id = screen_id;
-            
-            // Flush the new screen's content to physical buffer
             self.flush_to_physical();
-            
-            // Update cursor to the position stored in the new screen
             self.update_cursor();
             true
         } else {
