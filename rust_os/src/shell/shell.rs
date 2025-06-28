@@ -25,13 +25,19 @@ impl Shell {
         }
     }
 
+    // Check if we're on the user terminal screen (screen 1)
+    fn is_on_user_terminal(&self) -> bool {
+        let manager = screen_manager().lock();
+        manager.active_screen_id == 1
+    }
+
     pub fn init(&mut self) {
         self.clear_buffer();
         self.display_prompt();
     }
 
     pub fn display_prompt(&mut self) {
-        if !self.prompt_displayed {
+        if !self.prompt_displayed && self.is_on_user_terminal() {
             let mut manager = screen_manager().lock();
             let active_screen_id = manager.active_screen_id;
             if let Some(active_screen) = &mut manager.screens[active_screen_id] {
@@ -45,6 +51,10 @@ impl Shell {
     }
 
     pub fn handle_character(&mut self, c: char) {
+        if !self.is_on_user_terminal() {
+            return; // Only handle characters on user terminal
+        }
+        
         if self.buffer_length < COMMAND_BUFFER_SIZE - 1 {
             // Insert character at cursor position
             if self.cursor_position < self.buffer_length {
@@ -71,6 +81,10 @@ impl Shell {
     }
 
     pub fn handle_backspace(&mut self) {
+        if !self.is_on_user_terminal() {
+            return; // Only handle backspace on user terminal
+        }
+        
         if self.cursor_position > 0 && self.buffer_length > 0 {
             // Remove character at cursor position - 1
             self.cursor_position -= 1;
@@ -103,8 +117,12 @@ impl Shell {
     }
 
     pub fn handle_delete(&mut self) {
+        if !self.is_on_user_terminal() {
+            return; // Only handle delete on user terminal
+        }
+        
         if self.cursor_position < self.buffer_length {
-            // Shift characters to the left
+            // Shift characters to the left starting from cursor position
             for i in self.cursor_position..self.buffer_length - 1 {
                 self.command_buffer[i] = self.command_buffer[i + 1];
             }
@@ -112,15 +130,24 @@ impl Shell {
             self.buffer_length -= 1;
             self.command_buffer[self.buffer_length] = 0;
 
-            // Update display - clear character at current position
+            // Update display - clear character at current position and shift remaining characters
             let mut manager = screen_manager().lock();
             let active_screen_id = manager.active_screen_id;
             if let Some(active_screen) = &mut manager.screens[active_screen_id] {
-                active_screen.write_byte_at(
-                    active_screen.row_position,
-                    active_screen.column_position,
-                    b' '
-                );
+                let row = active_screen.row_position;
+                let col = active_screen.column_position;
+                
+                // Clear current character
+                active_screen.write_byte_at(row, col, b' ');
+                
+                // Shift remaining characters on screen to the left
+                for i in 0..(self.buffer_length - self.cursor_position) {
+                    let next_char = self.command_buffer[self.cursor_position + i];
+                    active_screen.write_byte_at(row, col + i, next_char);
+                }
+                
+                // Clear the last character that was shifted
+                active_screen.write_byte_at(row, col + (self.buffer_length - self.cursor_position), b' ');
             }
             manager.flush_to_physical();
             manager.update_cursor();
@@ -128,6 +155,10 @@ impl Shell {
     }
 
     pub fn handle_enter(&mut self) {
+        if !self.is_on_user_terminal() {
+            return; // Only handle enter on user terminal
+        }
+        
         // Add newline after command
         {
             let mut manager = screen_manager().lock();
@@ -152,6 +183,10 @@ impl Shell {
     }
 
     pub fn handle_arrow_left(&mut self) {
+        if !self.is_on_user_terminal() {
+            return;
+        }
+        
         if self.cursor_position > 0 {
             self.cursor_position -= 1;
             
@@ -168,6 +203,10 @@ impl Shell {
     }
 
     pub fn handle_arrow_right(&mut self) {
+        if !self.is_on_user_terminal() {
+            return;
+        }
+
         if self.cursor_position < self.buffer_length {
             self.cursor_position += 1;
             
@@ -184,6 +223,10 @@ impl Shell {
     }
 
     pub fn handle_home(&mut self) {
+        if !self.is_on_user_terminal() {
+            return;
+        }
+
         self.cursor_position = 0;
         
         let mut manager = screen_manager().lock();
@@ -196,6 +239,10 @@ impl Shell {
     }
 
     pub fn handle_end(&mut self) {
+        if !self.is_on_user_terminal() {
+            return;
+        }
+        
         self.cursor_position = self.buffer_length;
         
         let mut manager = screen_manager().lock();
