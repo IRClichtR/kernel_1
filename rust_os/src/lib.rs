@@ -137,7 +137,7 @@ use core::fmt::Write;
 use crate::drivers::keyboard;
 use crate::screen::global::{init_screen_manager, screen_manager};
 use crate::screen::screen::Writer;
-use crate::shell::{init_shell, global_shell};
+use crate::shell::shell::{init_shell, global_shell};
 
 #[no_mangle]
 pub extern "C" fn kernel_main() -> ! {
