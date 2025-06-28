@@ -3,7 +3,7 @@
 pub mod drivers;
 pub mod printk;
 pub mod arch;
-pub mod vga_buffer;
+// pub mod vga_buffer;
 pub mod screen;
 pub mod kspin_lock;
 use core::panic::PanicInfo;
@@ -17,20 +17,15 @@ use crate::screen::screen::Writer;
 pub extern "C" fn kernel_main() -> ! {
     init_screen_manager();
     
-    // Test basic screen functionality
     {
         let mut manager = screen_manager().lock();
-        
-        // Create a second screen
+    
         if let Some(_screen_id) = manager.create_screen() {
-            
-            // Write directly to screen 0
             if let Some(screen) = &mut manager.screens[0] {
                 let mut writer = Writer::new(screen);
                 write!(writer, "kernel logs\n").unwrap();
             }
             
-            // Switch to screen 1 and write
             if manager.switch_screen(1) {
                 if let Some(screen) = &mut manager.screens[1] {
                     let mut writer = Writer::new(screen);
@@ -38,12 +33,10 @@ pub extern "C" fn kernel_main() -> ! {
                 }
             }
             
-            // Switch back to screen 0
             manager.switch_screen(0);
         }
     }
     
-    // Init keyboard
     keyboard::init_keyboard();
     
     loop {
@@ -83,23 +76,28 @@ pub extern "C" fn kernel_main() -> ! {
                 keyboard::KeyEvents::Enter => {
                     vga_buffer::WRITER.lock().new_line();
                 }
-                // screen switching
                 keyboard::KeyEvents::SwitchScreenLeft => {
-                    let mut manager = screen_manager().lock();
-                    let current_screen = manager.active_screen_id;
-                    let new_screen = if current_screen == 0 { 1 } else { 0 };
-                    if !manager.switch_screen(new_screen) {
-                       //exit
+                    let switch_successful = {
+                        let mut manager = screen_manager().lock();
+                        let current_screen = manager.active_screen_id;
+                        let new_screen = if current_screen == 0 { 1 } else { 0 };
+                        manager.switch_screen(new_screen)
+                    };
+                    
+                    if !switch_successful {
+                        printk!(LogLevel::Critical, "Fatal error switching the screen\n");
                     }
                 }
                 keyboard::KeyEvents::SwitchScreenRight => {
-                    let mut manager = screen_manager().lock();
-                    let current_screen = manager.active_screen_id;
-                    let new_screen = if current_screen == 0 { 1 } else { 0 };
-                    if !manager.switch_screen(new_screen) {
-                       // exit
-                    } else {
-                        //printk!(LogLevel::Info, "All printk output should appear on the active screen\n");
+                    let switch_successful = {
+                        let mut manager = screen_manager().lock();
+                        let current_screen = manager.active_screen_id;
+                        let new_screen = if current_screen == 0 { 1 } else { 0 };
+                        manager.switch_screen(new_screen)
+                    };
+                    
+                    if !switch_successful {
+                        printk!(LogLevel::Critical, "Fatal error switching the screen\n");
                     }
                 }
             }

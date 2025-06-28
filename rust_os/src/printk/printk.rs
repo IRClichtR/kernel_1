@@ -61,8 +61,7 @@ impl Write for Logger {
             for byte in s.bytes() {
                 writer.write_byte(byte);
             }
-            
-            // Always flush and update cursor for active screen
+
             manager.flush_to_physical();
             manager.update_cursor();
         }
