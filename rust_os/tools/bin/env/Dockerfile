@@ -1,4 +1,4 @@
-FROM rust:slim
+FROM ubuntu:22.04
 
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
@@ -20,7 +20,9 @@ RUN apt-get update && \
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Rust nightly and required components
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain nightly && \
+    rustup component add rust-src --toolchain nightly
+
 RUN rustup toolchain install nightly && \
     rustup default nightly && \
     rustup component add rust-src --toolchain nightly

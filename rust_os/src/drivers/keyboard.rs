@@ -1,7 +1,7 @@
 use crate::arch::x86::port::inb;
 use crate::printk;
-use crate::printk::printk::LogLevel;
-use crate::vga_buffer::vga_buffer::{WRITER, BUFFER_HEIGHT, BUFFER_WIDTH};
+use crate::screen::global::screen_manager;
+use crate::screen::screen::{BUFFER_HEIGHT, BUFFER_WIDTH};
 
 // keyboard ports
 const KEYBOARD_DATA_PORT: u16 = 0x60;
@@ -37,7 +37,6 @@ const SCANCODE_TO_ASCII: [u8; 128] = [
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 ];
 
-
 #[derive(Clone, Copy, Debug)]
 pub enum KeyEvents {
     Character(char),
@@ -46,9 +45,12 @@ pub enum KeyEvents {
     ArrowLeft,
     ArrowRight,
     BackSpace,
+    Delete,
     Enter,
     Home,
-    End
+    End,
+    SwitchScreenLeft,
+    SwitchScreenRight
 }
 
 // Global state for modifier keys
@@ -61,7 +63,7 @@ static mut WAIT_FOR_EXTENDED: bool = false;
 pub fn init_keyboard() {
     unsafe {
         while keyboard_has_data() {
-            let _ = inb(KEYBOARD_DATA_PORT); // Clear any existing data in the buffer
+            let _ = inb(KEYBOARD_DATA_PORT);
         }
         WAIT_FOR_EXTENDED = false;
     }
@@ -103,10 +105,23 @@ pub fn handle_scancode(scancode: u8) -> Option<KeyEvents> {
             return match key_code {
                 0x48 => Some(KeyEvents::ArrowUp),    // Up arrow
                 0x50 => Some(KeyEvents::ArrowDown),  // Down arrow
-                0x4B => Some(KeyEvents::ArrowLeft),  // Left arrow
-                0x4D => Some(KeyEvents::ArrowRight), // Right arrow
+                0x4B => {
+                    if CTRL_PRESSED {
+                        Some(KeyEvents::SwitchScreenLeft)  // Ctrl+Left = switch screen left
+                    } else {
+                        Some(KeyEvents::ArrowLeft)  // Left arrow
+                    }
+                }
+                0x4D => {
+                    if CTRL_PRESSED {
+                        Some(KeyEvents::SwitchScreenRight) // Ctrl+Right = switch screen right
+                    } else {
+                        Some(KeyEvents::ArrowRight) // Right arrow
+                    }
+                }
                 0x47 => Some(KeyEvents::Home),       // Home
                 0x4F => Some(KeyEvents::End),        // End
+                0x53 => Some(KeyEvents::Delete),     // Delete key (E0 53)
                 _ => None,
             };
         }
@@ -180,59 +195,113 @@ pub fn handle_scancode(scancode: u8) -> Option<KeyEvents> {
 }
 
 //=====================================================================================================================================
-//                                         CURSOR  MANAGEMENT
+//                                         CURSOR  MANAGEMENT - REFACTORED TO USE SCREEN MANAGER
 //=====================================================================================================================================
 
 pub fn move_cursor_up() {
-    let mut writer = WRITER.lock();
-    let row = writer.get_row();
-    if row > 0 {
-        writer.set_row(row - 1);
+    let mut manager = screen_manager().lock();
+    let active_screen_id = manager.active_screen_id;
+    if let Some(active_screen) = &mut manager.screens[active_screen_id] {
+        let row = active_screen.row_position;
+        if row > 0 {
+            active_screen.set_row_position(row - 1);
+        }
     }
+    manager.update_cursor();
 }
 
 pub fn move_cursor_down() {
-    let mut writer = WRITER.lock();
-    let row = writer.get_row();
-    if row < BUFFER_HEIGHT - 1 {
-        writer.set_row(row + 1);
+    let mut manager = screen_manager().lock();
+    let active_screen_id = manager.active_screen_id;
+    if let Some(active_screen) = &mut manager.screens[active_screen_id] {
+        let row = active_screen.row_position;
+        if row < BUFFER_HEIGHT - 1 {
+            active_screen.set_row_position(row + 1);
+        }
     }
+    manager.update_cursor();
 }
 
 pub fn move_cursor_left() {
-    let mut writer = WRITER.lock();
-    let col = writer.get_col();
-    if col > 0 {
-        writer.set_col(col - 1);
+    let mut manager = screen_manager().lock();
+    let active_screen_id = manager.active_screen_id;
+    if let Some(active_screen) = &mut manager.screens[active_screen_id] {
+        let col = active_screen.column_position;
+        if col > 0 {
+            active_screen.set_column_position(col - 1);
+        }
     }
+    manager.update_cursor();
 }
 
 pub fn move_cursor_right() {
-    let mut writer = WRITER.lock();
-    let col = writer.get_col();
-    if col < BUFFER_WIDTH - 1 {
-        writer.set_col(col + 1);
+    let mut manager = screen_manager().lock();
+    let active_screen_id = manager.active_screen_id;
+    if let Some(active_screen) = &mut manager.screens[active_screen_id] {
+        let col = active_screen.column_position;
+        if col < BUFFER_WIDTH - 1 {
+            active_screen.set_column_position(col + 1);
+        }
     }
+    manager.update_cursor();
 }
 
 pub fn write_at_cursor(c: char) {
-    let mut writer = WRITER.lock();
-    writer.write_byte(c as u8);
+    let mut manager = screen_manager().lock();
+    let active_screen_id = manager.active_screen_id;
+    if let Some(active_screen) = &mut manager.screens[active_screen_id] {
+        active_screen.write_byte(c as u8);
+    }
+    manager.flush_to_physical();
+    manager.update_cursor();
 }
 
 pub fn move_cursor_home() {
-    let mut writer = WRITER.lock();
-    writer.set_cursor_position(0, 0);
+    let mut manager = screen_manager().lock();
+    let active_screen_id = manager.active_screen_id;
+    if let Some(active_screen) = &mut manager.screens[active_screen_id] {
+        active_screen.set_cursor_position(0, 0);
+    }
+    manager.update_cursor();
 }
 
 pub fn move_cursor_end() {
-    let mut writer = WRITER.lock();
-    writer.set_cursor_position(BUFFER_HEIGHT - 1, BUFFER_WIDTH - 1);
+    let mut manager = screen_manager().lock();
+    let active_screen_id = manager.active_screen_id;
+    if let Some(active_screen) = &mut manager.screens[active_screen_id] {
+        active_screen.set_cursor_position(BUFFER_HEIGHT - 1, BUFFER_WIDTH - 1);
+    }
+    manager.update_cursor();
 }
 
 pub fn handle_backspace() {
-    let mut writer = WRITER.lock();
-    move_cursor_left();
-    writer.write_byte(b' '); // Write a space to clear the character
-    move_cursor_left(); // Move cursor back to the left after writing space
+    let mut manager = screen_manager().lock();
+    let active_screen_id = manager.active_screen_id;
+    if let Some(active_screen) = &mut manager.screens[active_screen_id] {
+        let col = active_screen.column_position;
+        if col > 0 {
+            active_screen.set_column_position(col - 1);
+            active_screen.write_byte_at(
+                active_screen.row_position,
+                active_screen.column_position,
+                b' '
+            );
+        }
+    }
+    manager.flush_to_physical();
+    manager.update_cursor();
+}
+
+pub fn handle_delete() {
+    let mut manager = screen_manager().lock();
+    let active_screen_id = manager.active_screen_id;
+    if let Some(active_screen) = &mut manager.screens[active_screen_id] {
+        active_screen.write_byte_at(
+            active_screen.row_position,
+            active_screen.column_position,
+            b' '
+        );
+    }
+    manager.flush_to_physical();
+    manager.update_cursor();
 }
