@@ -3,7 +3,6 @@ use core::arch::asm;
 use crate::screen::global::screen_manager;
 use crate::screen::screen::Writer;
 use crate::printk;
-use crate::printk::printk::LogLevel;
 
 // Command buffer size - reasonable for kernel space
 const COMMAND_BUFFER_SIZE: usize = 256;
@@ -385,17 +384,22 @@ impl Shell {
         // Trim whitespace
         let command_str = command_str.trim();
         
-        // Parse command and arguments
+        // Parse command and arguments - copy command name into a local buffer
         let mut parts = command_str.split_whitespace();
         let command = parts.next().unwrap_or("");
+        let mut cmd_buf = [0u8; 32];
+        let cmd_bytes = command.as_bytes();
+        let cmd_len = core::cmp::min(cmd_bytes.len(), cmd_buf.len());
+        cmd_buf[..cmd_len].copy_from_slice(&cmd_bytes[..cmd_len]);
+        let command_local = core::str::from_utf8(&cmd_buf[..cmd_len]).unwrap_or("");
         
-        match command {
+        match command_local {
             "reboot" => self.cmd_reboot(),
             "halt" => self.cmd_halt(),
             "clear" => self.cmd_clear(),
             "help" => self.cmd_help(),
             "" => {}, // Empty command, do nothing
-            _ => self.cmd_unknown(command),
+            _ => self.cmd_unknown(command_local),
         }
     }
 
@@ -474,13 +478,13 @@ impl Shell {
         // Method 1: Try ACPI reset (most modern systems)
         unsafe {
             // ACPI reset register (if available)
-            asm!("
-                mov dx, 0xcf9
-                mov al, 0x02
-                out dx, al
-                mov al, 0x06
-                out dx, al
-            ");
+            asm!(
+                "mov dx, 0xcf9",
+                "mov al, 0x02",
+                "out dx, al",
+                "mov al, 0x06",
+                "out dx, al",
+            );
         }
 
         // Small delay
@@ -489,15 +493,14 @@ impl Shell {
         // Method 2: Keyboard controller reset (older systems)
         unsafe {
             // Reset via keyboard controller
-            asm!("
-                mov dx, 0x64
-                wait_kb1:
-                    in al, dx
-                    test al, 0x02
-                    jnz wait_kb1
-                mov al, 0xfe
-                out dx, al
-            ");
+            asm!(
+                "mov dx, 0x64",
+                "2: in al, dx",
+                "test al, 0x02",
+                "jnz 2b",
+                "mov al, 0xfe",
+                "out dx, al",
+            );
         }
 
         // Small delay
@@ -506,10 +509,11 @@ impl Shell {
         // Method 3: Triple fault (force CPU reset)
         unsafe {
             // Load invalid IDT to cause triple fault
-            asm!("
-                lidt [{}]
-                int 3
-            ", in(reg) &0u64 as *const u64);
+            asm!(
+                "lidt [{}]",
+                "int 3",
+                in(reg) &0u64 as *const u64
+            );
         }
     }
 
@@ -549,5 +553,5 @@ pub fn global_shell() -> &'static KSpinLock<Shell> {
 pub fn init_shell() {
     let mut shell = SHELL.lock();
     shell.init();
-    printk!(LogLevel::Info, "Shell initialized.\n");
+    printk!("Shell initialized.\n");
 }
