@@ -40,7 +40,7 @@ NASMFLAGS   := -f elf32
 LD          := ld
 LDFLAGS     := -m elf_i386 -T $(LINKER)
 CARGO       := cargo +nightly
-CARGO_FLAGS := --target $(TARGET_SPEC) --release -C opt-level=1
+CARGO_FLAGS := --target $(TARGET_SPEC) --release opt-level=1
 QEMU        := qemu-system-i386
 QEMU_FLAGS  := -monitor stdio
 
@@ -53,8 +53,6 @@ DOCKER_BIN_DIR := $(TOOLS_DIR)/bin/env
 DOCKER_BIN_CMD := docker run \
   --name $(DOCKER_CONTAINER_NAME_BIN) --rm \
   --platform linux/amd64 \
-  --memory=8g \
-  --memory-swap=8g \
   -v $(CURDIR):/project \
   -w /project \
   $(DOCKER_BIN_IMAGE)
@@ -97,7 +95,7 @@ $(BOOT_OBJ): $(BOOT_SRC) docker-bin-image | $(BUILD_OBJ)
 # Rust compilation
 $(KERNEL_OBJ): $(KERNEL_SRC) $(TARGET_SPEC) | $(BUILD_OBJ)
 	@echo "==> Compiling Rust kernel"
-	$(DOCKER_BIN_CMD) cargo +nightly build --target $(TARGET_SPEC) --release -C opt-level=1
+	$(DOCKER_BIN_CMD) cargo +nightly build --target $(TARGET_SPEC) --release
 	$(DOCKER_BIN_CMD) cp target/$(ARCH)-unknown-none/release/lib$(NAME).a $@
 	@echo "==> Kernel object created at $@"
 
