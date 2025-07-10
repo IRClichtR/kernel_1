@@ -1,5 +1,4 @@
 use core::fmt::{Write, Result};
-use crate::printk;
 use crate::screen::global::screen_manager;
 use crate::screen::screen::Writer;
 

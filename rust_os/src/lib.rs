@@ -27,6 +27,7 @@ pub extern "C" fn kernel_main() -> ! {
     let gdt_base = gdt_desc.base;
     let gdt_limit = gdt_desc.limit;
     printk!(LogLevel::Info, "GDT inherited from GRUB: GDT Base: {:#x}, Limit: {:#x}\n", gdt_base, gdt_limit);
+    gdt::dump_gdt_descriptors(gdt_desc);
 
     loop {
         // Poll keyboard for input
