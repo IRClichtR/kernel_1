@@ -13,6 +13,7 @@ use crate::drivers::keyboard;
 use crate::screen::global::{init_screen_manager, screen_manager};
 use crate::screen::screen::Writer;
 use crate::command::{init_command_handler, command_handler};
+use crate::arch::x86::gdt;
 
 #[no_mangle]
 pub extern "C" fn kernel_main() -> ! {
@@ -20,6 +21,12 @@ pub extern "C" fn kernel_main() -> ! {
     init_command_handler(); 
     
     keyboard::init_keyboard();
+
+    // Read the Global Descriptor Table (GDT)
+    let gdt_desc = gdt::read_gdtr();
+    let gdt_base = gdt_desc.base;
+    let gdt_limit = gdt_desc.limit;
+    printk!(LogLevel::Info, "GDT inherited from GRUB: GDT Base: {:#x}, Limit: {:#x}\n", gdt_base, gdt_limit);
 
     loop {
         // Poll keyboard for input
