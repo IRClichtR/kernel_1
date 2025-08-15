@@ -39,7 +39,7 @@ impl CommandHandler {
             // Get current cursor position from screen
             let mut manager = screen_manager().lock();
             if let Some(screen) = &mut manager.screens[1] {
-                let cursor_pos = screen.column_position - self.prompt_start_col;
+                let cursor_pos = screen.column_position.saturating_sub(self.prompt_start_col);
                 
                 // Insert character at cursor position
                 if cursor_pos < self.buffer_len {
@@ -70,7 +70,7 @@ impl CommandHandler {
     pub fn delete_char(&mut self) {
         let mut manager = screen_manager().lock();
         if let Some(screen) = &mut manager.screens[1] {
-            let cursor_pos = screen.column_position - self.prompt_start_col;
+            let cursor_pos = screen.column_position.saturating_sub(self.prompt_start_col);
             
             if cursor_pos < self.buffer_len {
                 // Remove character from buffer
@@ -81,20 +81,17 @@ impl CommandHandler {
                 self.buffer_len -= 1;
                 self.buffer[self.buffer_len] = 0;
                 
-                // Clear from cursor position to end of line
+                // Simple approach: just clear the current character and redraw the rest
                 let mut writer = Writer::new(screen);
-                for _ in cursor_pos..BUFFER_WIDTH - self.prompt_start_col {
-                    writer.write_byte(b' ');
-                }
+                writer.write_byte(b' '); // Clear current position
                 
-                // Reset cursor to start position
-                screen.column_position = self.prompt_start_col + cursor_pos;
-                
-                // Redraw remaining characters
-                let mut writer = Writer::new(screen);
+                // Redraw remaining characters after cursor
                 for i in cursor_pos..self.buffer_len {
                     writer.write_byte(self.buffer[i]);
                 }
+                
+                // Clear any trailing character
+                writer.write_byte(b' ');
             }
         }
         manager.flush_to_physical();
@@ -104,7 +101,7 @@ impl CommandHandler {
     pub fn backspace(&mut self) {
         let mut manager = screen_manager().lock();
         if let Some(screen) = &mut manager.screens[1] {
-            let cursor_pos = screen.column_position - self.prompt_start_col;
+            let cursor_pos = screen.column_position.saturating_sub(self.prompt_start_col);
             
             if cursor_pos > 0 {
                 // Move cursor back
@@ -118,20 +115,17 @@ impl CommandHandler {
                 self.buffer_len -= 1;
                 self.buffer[self.buffer_len] = 0;
                 
-                // Clear from cursor position to end of line
+                // Simple approach: clear current position and redraw
                 let mut writer = Writer::new(screen);
-                for _ in cursor_pos - 1..BUFFER_WIDTH - self.prompt_start_col {
-                    writer.write_byte(b' ');
-                }
-                
-                // Reset cursor to start position
-                screen.column_position = self.prompt_start_col + cursor_pos - 1;
+                writer.write_byte(b' '); // Clear current position
                 
                 // Redraw remaining characters
-                let mut writer = Writer::new(screen);
                 for i in cursor_pos - 1..self.buffer_len {
                     writer.write_byte(self.buffer[i]);
                 }
+                
+                // Clear any trailing character
+                writer.write_byte(b' ');
             }
         }
         manager.flush_to_physical();
@@ -141,7 +135,7 @@ impl CommandHandler {
     pub fn move_cursor_left(&mut self) {
         let mut manager = screen_manager().lock();
         if let Some(screen) = &mut manager.screens[1] {
-            let cursor_pos = screen.column_position - self.prompt_start_col;
+            let cursor_pos = screen.column_position.saturating_sub(self.prompt_start_col);
             if cursor_pos > 0 {
                 screen.column_position -= 1;
             }
@@ -152,7 +146,7 @@ impl CommandHandler {
     pub fn move_cursor_right(&mut self) {
         let mut manager = screen_manager().lock();
         if let Some(screen) = &mut manager.screens[1] {
-            let cursor_pos = screen.column_position - self.prompt_start_col;
+            let cursor_pos = screen.column_position.saturating_sub(self.prompt_start_col);
             if cursor_pos < self.buffer_len {
                 screen.column_position += 1;
             }
@@ -171,7 +165,7 @@ impl CommandHandler {
     pub fn move_cursor_end(&mut self) {
         let mut manager = screen_manager().lock();
         if let Some(screen) = &mut manager.screens[1] {
-            screen.column_position = self.prompt_start_col + self.buffer_len;
+            screen.column_position = self.prompt_start_col.saturating_add(self.buffer_len);
         }
         manager.update_cursor();
     }
