@@ -81,20 +81,26 @@ impl CommandHandler {
                 self.buffer_len -= 1;
                 self.buffer[self.buffer_len] = 0;
                 
-                // Clear current position and redraw remaining characters
-                let mut writer = Writer::new(screen);
-                writer.write_byte(b' '); // Clear current position
+                // Clear current position and redraw remaining characters using direct screen manipulation
+                // Clear current position
+                screen.write_byte_at(screen.row_position, screen.column_position, b' ');
                 
-                // Redraw remaining characters after cursor
-                for i in cursor_pos..self.buffer_len {
-                    writer.write_byte(self.buffer[i]);
+                // Redraw remaining characters after cursor (without advancing cursor)
+                for i in 0..self.buffer_len - cursor_pos {
+                    let col = self.prompt_start_col + cursor_pos + i;
+                    if col < BUFFER_WIDTH {
+                        screen.write_byte_at(screen.row_position, col, self.buffer[cursor_pos + i]);
+                    }
                 }
                 
                 // Clear any trailing character
-                writer.write_byte(b' ');
+                let trailing_col = self.prompt_start_col + self.buffer_len;
+                if trailing_col < BUFFER_WIDTH {
+                    screen.write_byte_at(screen.row_position, trailing_col, b' ');
+                }
                 
-                // Reset cursor to original position (cursor should stay in same place after delete)
-                screen.column_position = self.prompt_start_col.saturating_add(cursor_pos);
+                // Cursor should stay in the same position after delete
+                // No need to reset cursor position since we didn't use Writer
             }
         }
         manager.flush_to_physical();
@@ -118,20 +124,26 @@ impl CommandHandler {
                 self.buffer_len -= 1;
                 self.buffer[self.buffer_len] = 0;
                 
-                // Clear current position and redraw remaining characters
-                let mut writer = Writer::new(screen);
-                writer.write_byte(b' '); // Clear current position
+                // Clear current position and redraw remaining characters using direct screen manipulation
+                // Clear current position
+                screen.write_byte_at(screen.row_position, screen.column_position, b' ');
                 
-                // Redraw remaining characters
-                for i in cursor_pos - 1..self.buffer_len {
-                    writer.write_byte(self.buffer[i]);
+                // Redraw remaining characters (without advancing cursor)
+                for i in 0..self.buffer_len - (cursor_pos - 1) {
+                    let col = self.prompt_start_col + (cursor_pos - 1) + i;
+                    if col < BUFFER_WIDTH {
+                        screen.write_byte_at(screen.row_position, col, self.buffer[(cursor_pos - 1) + i]);
+                    }
                 }
                 
                 // Clear any trailing character
-                writer.write_byte(b' ');
+                let trailing_col = self.prompt_start_col + self.buffer_len;
+                if trailing_col < BUFFER_WIDTH {
+                    screen.write_byte_at(screen.row_position, trailing_col, b' ');
+                }
                 
-                // Reset cursor to the new position (one character back)
-                screen.column_position = self.prompt_start_col.saturating_add(cursor_pos - 1);
+                // Cursor is already in the correct position (moved back by 1)
+                // No need to reset cursor position since we didn't use Writer
             }
         }
         manager.flush_to_physical();
