@@ -81,7 +81,7 @@ impl CommandHandler {
                 self.buffer_len -= 1;
                 self.buffer[self.buffer_len] = 0;
                 
-                // Simple approach: just clear the current character and redraw the rest
+                // Clear current position and redraw remaining characters
                 let mut writer = Writer::new(screen);
                 writer.write_byte(b' '); // Clear current position
                 
@@ -92,6 +92,9 @@ impl CommandHandler {
                 
                 // Clear any trailing character
                 writer.write_byte(b' ');
+                
+                // Reset cursor to original position (cursor should stay in same place after delete)
+                screen.column_position = self.prompt_start_col.saturating_add(cursor_pos);
             }
         }
         manager.flush_to_physical();
@@ -104,7 +107,7 @@ impl CommandHandler {
             let cursor_pos = screen.column_position.saturating_sub(self.prompt_start_col);
             
             if cursor_pos > 0 {
-                // Move cursor back
+                // Move cursor back first
                 screen.column_position -= 1;
                 
                 // Remove character from buffer
@@ -115,7 +118,7 @@ impl CommandHandler {
                 self.buffer_len -= 1;
                 self.buffer[self.buffer_len] = 0;
                 
-                // Simple approach: clear current position and redraw
+                // Clear current position and redraw remaining characters
                 let mut writer = Writer::new(screen);
                 writer.write_byte(b' '); // Clear current position
                 
@@ -126,6 +129,9 @@ impl CommandHandler {
                 
                 // Clear any trailing character
                 writer.write_byte(b' ');
+                
+                // Reset cursor to the new position (one character back)
+                screen.column_position = self.prompt_start_col.saturating_add(cursor_pos - 1);
             }
         }
         manager.flush_to_physical();
