@@ -66,6 +66,9 @@ pub fn init_keyboard() {
             let _ = inb(KEYBOARD_DATA_PORT);
         }
         WAIT_FOR_EXTENDED = false;
+        SHIFT_PRESSED = false;
+        CTRL_PRESSED = false;
+        ALT_PRESSED = false;
     }
 
     printk!(LogLevel::Info, "Keyboard initialized.\n");
@@ -77,6 +80,15 @@ pub fn keyboard_has_data() -> bool {
     }
 }
 
+pub fn reset_keyboard_state() {
+    unsafe {
+        WAIT_FOR_EXTENDED = false;
+        SHIFT_PRESSED = false;
+        CTRL_PRESSED = false;
+        ALT_PRESSED = false;
+    }
+}
+
 pub fn poll_keyboard() -> Option<KeyEvents> {
     if !keyboard_has_data() {
         return None;
@@ -84,6 +96,14 @@ pub fn poll_keyboard() -> Option<KeyEvents> {
 
     unsafe {
         let scancode = inb(KEYBOARD_DATA_PORT);
+        
+        // Add some basic error handling
+        if scancode == 0xFF {
+            // Invalid scancode, reset keyboard state
+            reset_keyboard_state();
+            return None;
+        }
+        
         handle_scancode(scancode)
     }
 }
@@ -97,6 +117,15 @@ pub fn handle_scancode(scancode: u8) -> Option<KeyEvents> {
 
         let is_extended = WAIT_FOR_EXTENDED;
         WAIT_FOR_EXTENDED = false;
+        
+        // Add timeout protection for extended key state
+        if is_extended && scancode == 0x00 {
+            // Invalid extended key, reset state
+            WAIT_FOR_EXTENDED = false;
+            return None;
+        }
+        
+
 
         let key_released = scancode & 0x80 != 0;
         let key_code = scancode & 0x7F;

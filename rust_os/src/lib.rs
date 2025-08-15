@@ -122,13 +122,21 @@ pub extern "C" fn kernel_main() -> ! {
                     }
                 }
                 keyboard::KeyEvents::Delete => {
-                    let manager = screen_manager().lock();
-                    let active_screen_id = manager.active_screen_id;
+                    // ROBUST DELETE KEY HANDLING
+                    let active_screen_id = {
+                        let manager = screen_manager().lock();
+                        let id = manager.active_screen_id;
+                        drop(manager); // Explicitly drop the lock
+                        id
+                    };
                     
                     if active_screen_id == 1 {
-                        drop(manager);
-                        let mut cmd_handler = command_handler().lock();
-                        cmd_handler.delete_char();
+                        // Use a separate scope to ensure locks are dropped
+                        {
+                            let mut cmd_handler = command_handler().lock();
+                            cmd_handler.delete_char();
+                            drop(cmd_handler); // Explicitly drop the lock
+                        }
                     }
                 }
                 
