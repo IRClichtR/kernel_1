@@ -81,17 +81,20 @@ impl CommandHandler {
                 self.buffer_len -= 1;
                 self.buffer[self.buffer_len] = 0;
                 
-                // Clear the current character and redraw remaining ones
+                // Clear from cursor position to end of line
                 let mut writer = Writer::new(screen);
-                writer.write_byte(b' '); // Clear current position
+                for _ in cursor_pos..BUFFER_WIDTH - self.prompt_start_col {
+                    writer.write_byte(b' ');
+                }
                 
-                // Redraw remaining characters after cursor
+                // Reset cursor to start position
+                screen.column_position = self.prompt_start_col + cursor_pos;
+                
+                // Redraw remaining characters
+                let mut writer = Writer::new(screen);
                 for i in cursor_pos..self.buffer_len {
                     writer.write_byte(self.buffer[i]);
                 }
-                
-                // Clear any trailing characters
-                writer.write_byte(b' ');
             }
         }
         manager.flush_to_physical();
@@ -115,8 +118,20 @@ impl CommandHandler {
                 self.buffer_len -= 1;
                 self.buffer[self.buffer_len] = 0;
                 
-                // Redraw from new cursor position
-                self.refresh_command_display_from_cursor(cursor_pos - 1);
+                // Clear from cursor position to end of line
+                let mut writer = Writer::new(screen);
+                for _ in cursor_pos - 1..BUFFER_WIDTH - self.prompt_start_col {
+                    writer.write_byte(b' ');
+                }
+                
+                // Reset cursor to start position
+                screen.column_position = self.prompt_start_col + cursor_pos - 1;
+                
+                // Redraw remaining characters
+                let mut writer = Writer::new(screen);
+                for i in cursor_pos - 1..self.buffer_len {
+                    writer.write_byte(self.buffer[i]);
+                }
             }
         }
         manager.flush_to_physical();
@@ -161,25 +176,7 @@ impl CommandHandler {
         manager.update_cursor();
     }
 
-    fn refresh_command_display_from_cursor(&mut self, start_pos: usize) {
-        let mut manager = screen_manager().lock();
-        if let Some(screen) = &mut manager.screens[1] {
-            // Clear from cursor position to end of line
-            let mut writer = Writer::new(screen);
-            for _ in start_pos..BUFFER_WIDTH - self.prompt_start_col {
-                writer.write_byte(b' ');
-            }
-            
-            // Reset cursor to start position
-            screen.column_position = self.prompt_start_col + start_pos;
-            
-            // Redraw remaining characters
-            let mut writer = Writer::new(screen);
-            for i in start_pos..self.buffer_len {
-                writer.write_byte(self.buffer[i]);
-            }
-        }
-    }
+
 
     pub fn execute_command(&mut self) -> bool {
         if self.buffer_len == 0 {
