@@ -81,8 +81,17 @@ impl CommandHandler {
                 self.buffer_len -= 1;
                 self.buffer[self.buffer_len] = 0;
                 
-                // Redraw from cursor position
-                self.refresh_command_display_from_cursor(cursor_pos);
+                // Clear the current character and redraw remaining ones
+                let mut writer = Writer::new(screen);
+                writer.write_byte(b' '); // Clear current position
+                
+                // Redraw remaining characters after cursor
+                for i in cursor_pos..self.buffer_len {
+                    writer.write_byte(self.buffer[i]);
+                }
+                
+                // Clear any trailing characters
+                writer.write_byte(b' ');
             }
         }
         manager.flush_to_physical();
@@ -226,7 +235,9 @@ impl CommandHandler {
             let mut manager = screen_manager().lock();
             if let Some(screen) = &mut manager.screens[1] {
                 let mut writer = Writer::new(screen);
-                write!(writer, "Rebooting system...\n").unwrap();
+                for byte in b"Rebooting system...\n" {
+                    writer.write_byte(*byte);
+                }
             }
             manager.flush_to_physical();
             manager.update_cursor();
@@ -271,7 +282,9 @@ impl CommandHandler {
             let mut manager = screen_manager().lock();
             if let Some(screen) = &mut manager.screens[1] {
                 let mut writer = Writer::new(screen);
-                write!(writer, "System halted. Safe to power off.\n").unwrap();
+                for byte in b"System halted. Safe to power off.\n" {
+                    writer.write_byte(*byte);
+                }
             }
             manager.flush_to_physical();
             manager.update_cursor();
@@ -310,12 +323,23 @@ impl CommandHandler {
         let mut manager = screen_manager().lock();
         if let Some(screen) = &mut manager.screens[1] {
             let mut writer = Writer::new(screen);
-            write!(writer, "Available commands:\n").unwrap();
-            write!(writer, "  help   - Show this help message\n").unwrap();
-            write!(writer, "  clear  - Clear the screen\n").unwrap();
-            write!(writer, "  reboot - Restart the system\n").unwrap();
-            write!(writer, "  halt   - Halt the system (safe to power off)\n").unwrap();
-            write!(writer, "\n").unwrap();
+            // Write each line individually to ensure proper cursor updates
+            for byte in b"Available commands:\n" {
+                writer.write_byte(*byte);
+            }
+            for byte in b"  help   - Show this help message\n" {
+                writer.write_byte(*byte);
+            }
+            for byte in b"  clear  - Clear the screen\n" {
+                writer.write_byte(*byte);
+            }
+            for byte in b"  reboot - Restart the system\n" {
+                writer.write_byte(*byte);
+            }
+            for byte in b"  halt   - Halt the system (safe to power off)\n" {
+                writer.write_byte(*byte);
+            }
+            writer.write_byte(b'\n');
         }
         manager.flush_to_physical();
         manager.update_cursor();
@@ -326,7 +350,9 @@ impl CommandHandler {
         let mut manager = screen_manager().lock();
         if let Some(screen) = &mut manager.screens[1] {
             let mut writer = Writer::new(screen);
-            write!(writer, "Unknown command. Type 'help' for available commands.\n").unwrap();
+            for byte in b"Unknown command. Type 'help' for available commands.\n" {
+                writer.write_byte(*byte);
+            }
         }
         manager.flush_to_physical();
         manager.update_cursor();
@@ -339,13 +365,8 @@ impl CommandHandler {
             self.buffer[i] = 0;
         }
         
-        // Reset cursor to prompt position
-        let mut manager = screen_manager().lock();
-        if let Some(screen) = &mut manager.screens[1] {
-            screen.column_position = self.prompt_start_col;
-            screen.row_position = self.prompt_start_row;
-        }
-        manager.update_cursor();
+        // Don't reset cursor position here - let the Enter key handler do it
+        // The cursor should be at the end of command output, not at prompt position
     }
 
     /// Returns the current buffer length

@@ -158,10 +158,12 @@ pub extern "C" fn kernel_main() -> ! {
                         {
                             let mut manager = screen_manager().lock();
                             if let Some(screen) = &mut manager.screens[1] {
+                                // Write the prompt
                                 let mut writer = Writer::new(screen);
-                                write!(writer, "> ").unwrap();
+                                writer.write_byte(b'>');
+                                writer.write_byte(b' ');
                                 
-                                // Get current cursor position for prompt
+                                // Get current cursor position for prompt (after writing "> ")
                                 let prompt_row = screen.row_position;
                                 let prompt_col = screen.column_position;
                                 
