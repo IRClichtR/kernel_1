@@ -1,5 +1,5 @@
 use crate::screen::global::screen_manager;
-use crate::screen::screen::Writer;
+use crate::screen::screen::{Writer, BUFFER_WIDTH};
 use crate::arch::x86::port::outb;
 use core::fmt::Write;
 
@@ -15,7 +15,6 @@ pub enum Command {
 pub struct CommandHandler {
     buffer: [u8; 256],
     buffer_len: usize,
-    cursor_pos: usize,
     prompt_start_col: usize, 
     prompt_start_row: usize,
 }
@@ -25,7 +24,6 @@ impl CommandHandler {
         Self {
             buffer: [0; 256],
             buffer_len: 0,
-            cursor_pos: 0,
             prompt_start_col: 0,
             prompt_start_row: 0,
         }
@@ -38,108 +36,140 @@ impl CommandHandler {
 
     pub fn add_char(&mut self, ch: u8) {
         if self.buffer_len < self.buffer.len() - 1 && ch != b'\n' {
-            if self.cursor_pos < self.buffer_len {
-                for i in (self.cursor_pos..self.buffer_len).rev() {
-                    self.buffer[i + 1] = self.buffer[i];
+            // Get current cursor position from screen
+            let mut manager = screen_manager().lock();
+            if let Some(screen) = &mut manager.screens[1] {
+                let cursor_pos = screen.column_position - self.prompt_start_col;
+                
+                // Insert character at cursor position
+                if cursor_pos < self.buffer_len {
+                    for i in (cursor_pos..self.buffer_len).rev() {
+                        self.buffer[i + 1] = self.buffer[i];
+                    }
+                }
+                
+                self.buffer[cursor_pos] = ch;
+                self.buffer_len += 1;
+                
+                // Write character to screen
+                let mut writer = Writer::new(screen);
+                writer.write_byte(ch);
+                
+                // Shift remaining characters if inserting in middle
+                if cursor_pos < self.buffer_len - 1 {
+                    for i in cursor_pos + 1..self.buffer_len {
+                        writer.write_byte(self.buffer[i]);
+                    }
                 }
             }
-            
-            self.buffer[self.cursor_pos] = ch;
-            self.buffer_len += 1;
-            self.cursor_pos += 1;
-            self.refresh_command_display();
+            manager.flush_to_physical();
+            manager.update_cursor();
         }
     }
 
     pub fn delete_char(&mut self) {
-        if self.cursor_pos < self.buffer_len {
-            for i in self.cursor_pos..self.buffer_len - 1 {
-                self.buffer[i] = self.buffer[i + 1];
-            }
-            
-            self.buffer_len -= 1;
-            self.buffer[self.buffer_len] = 0;
-            
-            self.refresh_command_display();
-        }
-    }
-
-    pub fn backspace(&mut self) {
-        if self.cursor_pos > 0 {
-            self.cursor_pos -= 1;
-            self.delete_char();
-        }
-    }
-
-    pub fn move_cursor_left(&mut self) {
-        if self.cursor_pos > 0 {
-            self.cursor_pos -= 1;
-            self.update_screen_cursor();
-        }
-    }
-
-    pub fn move_cursor_right(&mut self) {
-        if self.cursor_pos < self.buffer_len {
-            self.cursor_pos += 1;
-            self.update_screen_cursor();
-        }
-    }
-
-
-    pub fn move_cursor_home(&mut self) {
-        self.cursor_pos = 0;
-        self.update_screen_cursor();
-    }
-
-    pub fn move_cursor_end(&mut self) {
-        self.cursor_pos = self.buffer_len;
-        self.update_screen_cursor();
-    }
-
-    fn refresh_command_display(&mut self) {
         let mut manager = screen_manager().lock();
         if let Some(screen) = &mut manager.screens[1] {
-            let _saved_column_position = screen.column_position;
-            let _saved_row_position = screen.row_position;
+            let cursor_pos = screen.column_position - self.prompt_start_col;
             
-            screen.column_position = self.prompt_start_col;
-            screen.row_position = self.prompt_start_row;
-            
-            {
-                let mut writer = Writer::new(screen);
-                for _ in 0..(80 - self.prompt_start_col) {
-                    writer.write_byte(b' ');
+            if cursor_pos < self.buffer_len {
+                // Remove character from buffer
+                for i in cursor_pos..self.buffer_len - 1 {
+                    self.buffer[i] = self.buffer[i + 1];
                 }
-            } // Writer is dropped here, releasing the borrow
-            
-            // Reset to prompt position and redraw command
-            screen.column_position = self.prompt_start_col;
-            screen.row_position = self.prompt_start_row;
-            
-            // Write the current command buffer
-            {
-                let mut writer = Writer::new(screen);
-                for i in 0..self.buffer_len {
-                    writer.write_byte(self.buffer[i]);
-                }
-            } // Writer is dropped here, releasing the borrow
-            
-            // Position cursor at the correct location
-            screen.column_position = self.prompt_start_col + self.cursor_pos;
-            screen.row_position = self.prompt_start_row;
+                
+                self.buffer_len -= 1;
+                self.buffer[self.buffer_len] = 0;
+                
+                // Redraw from cursor position
+                self.refresh_command_display_from_cursor(cursor_pos);
+            }
         }
-        
         manager.flush_to_physical();
         manager.update_cursor();
     }
 
-    fn update_screen_cursor(&mut self) {
+    pub fn backspace(&mut self) {
         let mut manager = screen_manager().lock();
         if let Some(screen) = &mut manager.screens[1] {
-            screen.column_position = self.prompt_start_col + self.cursor_pos;
-            screen.row_position = self.prompt_start_row;
+            let cursor_pos = screen.column_position - self.prompt_start_col;
+            
+            if cursor_pos > 0 {
+                // Move cursor back
+                screen.column_position -= 1;
+                
+                // Remove character from buffer
+                for i in cursor_pos - 1..self.buffer_len - 1 {
+                    self.buffer[i] = self.buffer[i + 1];
+                }
+                
+                self.buffer_len -= 1;
+                self.buffer[self.buffer_len] = 0;
+                
+                // Redraw from new cursor position
+                self.refresh_command_display_from_cursor(cursor_pos - 1);
+            }
+        }
+        manager.flush_to_physical();
+        manager.update_cursor();
+    }
+
+    pub fn move_cursor_left(&mut self) {
+        let mut manager = screen_manager().lock();
+        if let Some(screen) = &mut manager.screens[1] {
+            let cursor_pos = screen.column_position - self.prompt_start_col;
+            if cursor_pos > 0 {
+                screen.column_position -= 1;
+            }
         }
         manager.update_cursor();
+    }
+
+    pub fn move_cursor_right(&mut self) {
+        let mut manager = screen_manager().lock();
+        if let Some(screen) = &mut manager.screens[1] {
+            let cursor_pos = screen.column_position - self.prompt_start_col;
+            if cursor_pos < self.buffer_len {
+                screen.column_position += 1;
+            }
+        }
+        manager.update_cursor();
+    }
+
+    pub fn move_cursor_home(&mut self) {
+        let mut manager = screen_manager().lock();
+        if let Some(screen) = &mut manager.screens[1] {
+            screen.column_position = self.prompt_start_col;
+        }
+        manager.update_cursor();
+    }
+
+    pub fn move_cursor_end(&mut self) {
+        let mut manager = screen_manager().lock();
+        if let Some(screen) = &mut manager.screens[1] {
+            screen.column_position = self.prompt_start_col + self.buffer_len;
+        }
+        manager.update_cursor();
+    }
+
+    fn refresh_command_display_from_cursor(&mut self, start_pos: usize) {
+        let mut manager = screen_manager().lock();
+        if let Some(screen) = &mut manager.screens[1] {
+            // Clear from cursor position to end of line
+            let mut writer = Writer::new(screen);
+            for _ in start_pos..BUFFER_WIDTH - self.prompt_start_col {
+                writer.write_byte(b' ');
+            }
+            
+            // Reset cursor to start position
+            screen.column_position = self.prompt_start_col + start_pos;
+            
+            // Redraw remaining characters
+            let mut writer = Writer::new(screen);
+            for i in start_pos..self.buffer_len {
+                writer.write_byte(self.buffer[i]);
+            }
+        }
     }
 
     pub fn execute_command(&mut self) -> bool {
@@ -158,7 +188,6 @@ impl CommandHandler {
         self.clear_buffer();
         true
     }
-
 
     fn parse_command(&self, input: &str) -> Command {
         match input.trim() {
@@ -200,6 +229,7 @@ impl CommandHandler {
                 write!(writer, "Rebooting system...\n").unwrap();
             }
             manager.flush_to_physical();
+            manager.update_cursor();
         }
 
         // Perform keyboard controller reset (8042 reset)
@@ -244,6 +274,7 @@ impl CommandHandler {
                 write!(writer, "System halted. Safe to power off.\n").unwrap();
             }
             manager.flush_to_physical();
+            manager.update_cursor();
         }
 
         unsafe {
@@ -270,6 +301,7 @@ impl CommandHandler {
             // Reset cursor to top
             manager.set_cursor_position(0, 0);
             manager.flush_to_physical();
+            manager.update_cursor();
         }
     }
 
@@ -286,6 +318,7 @@ impl CommandHandler {
             write!(writer, "\n").unwrap();
         }
         manager.flush_to_physical();
+        manager.update_cursor();
     }
 
     /// Executes unknown command response
@@ -296,25 +329,28 @@ impl CommandHandler {
             write!(writer, "Unknown command. Type 'help' for available commands.\n").unwrap();
         }
         manager.flush_to_physical();
+        manager.update_cursor();
     }
 
     /// Clears the command buffer and resets cursor position
     fn clear_buffer(&mut self) {
         self.buffer_len = 0;
-        self.cursor_pos = 0;
         for i in 0..self.buffer.len() {
             self.buffer[i] = 0;
         }
+        
+        // Reset cursor to prompt position
+        let mut manager = screen_manager().lock();
+        if let Some(screen) = &mut manager.screens[1] {
+            screen.column_position = self.prompt_start_col;
+            screen.row_position = self.prompt_start_row;
+        }
+        manager.update_cursor();
     }
 
     /// Returns the current buffer length
     pub fn get_buffer_len(&self) -> usize {
         self.buffer_len
-    }
-
-    /// Returns the current cursor position within the buffer
-    pub fn get_cursor_pos(&self) -> usize {
-        self.cursor_pos
     }
 
     /// Gets the current command as a string slice

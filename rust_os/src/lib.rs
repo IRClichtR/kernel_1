@@ -137,6 +137,7 @@ pub extern "C" fn kernel_main() -> ! {
                     let active_screen_id = manager.active_screen_id;
                     
                     if active_screen_id == 1 {
+                        // Add newline to move to next line
                         if let Some(active_screen) = &mut manager.screens[active_screen_id] {
                             let mut writer = Writer::new(active_screen);
                             writer.write_byte(b'\n');
@@ -160,9 +161,12 @@ pub extern "C" fn kernel_main() -> ! {
                                 let mut writer = Writer::new(screen);
                                 write!(writer, "> ").unwrap();
                                 
-                                // Get current cursor position for prompt - using correct field names
+                                // Get current cursor position for prompt
                                 let prompt_row = screen.row_position;
                                 let prompt_col = screen.column_position;
+                                
+                                manager.flush_to_physical();
+                                manager.update_cursor();
                                 
                                 // Update prompt position in command handler
                                 drop(manager);
