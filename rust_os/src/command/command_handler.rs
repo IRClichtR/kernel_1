@@ -2,6 +2,7 @@ use crate::screen::global::screen_manager;
 use crate::screen::screen::{Writer, BUFFER_WIDTH};
 use crate::arch::x86::port::outb;
 use core::fmt::Write;
+use crate::printk;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Command {
@@ -62,6 +63,7 @@ impl CommandHandler {
                     }
                 }
             }
+            printk!(LogLevel::Info, "Buffer length: {}\n", self.buffer_len);
             manager.flush_to_physical();
             manager.update_cursor();
         }
