@@ -28,7 +28,8 @@ pub fn init_command_handler() {
         drop(manager);
         
         unsafe {
-            let mut cmd_handler = COMMAND_HANDLER.lock();
+            let cmd_handler_ptr = &raw mut COMMAND_HANDLER;
+            let mut cmd_handler = (*cmd_handler_ptr).lock();
             cmd_handler.set_prompt_position(prompt_row, prompt_col);
             drop(cmd_handler);
         }
@@ -39,5 +40,8 @@ pub fn init_command_handler() {
 }
 
 pub fn command_handler() -> &'static KSpinLock<CommandHandler> {
-    unsafe { &COMMAND_HANDLER }
+    unsafe { 
+        let cmd_handler_ptr = &raw const COMMAND_HANDLER;
+        &*cmd_handler_ptr
+    }
 }
