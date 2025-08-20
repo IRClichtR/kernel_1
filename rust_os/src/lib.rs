@@ -21,23 +21,18 @@ pub extern "C" fn kernel_main() -> ! {
     keyboard::init_keyboard();
 
     loop {
-        // Poll keyboard for input
         if let Some(key_event) = keyboard::poll_keyboard() {
             match key_event {
-                // Character input
                 keyboard::KeyEvents::Character(c) => {
                     let mut manager = screen_manager().lock();
                     let mut cmd_handler = command_handler().lock();
                     cmd_handler.add_char(c as u8, &mut manager);
                 }
                 
-                // Arrow key navigation
                 keyboard::KeyEvents::ArrowUp => {
-                    // Could be used for command history in the future
                     keyboard::move_cursor_up();
                 }
                 keyboard::KeyEvents::ArrowDown => {
-                    // Could be used for command history in the future
                     keyboard::move_cursor_down();
                 }
                 keyboard::KeyEvents::ArrowLeft => {
@@ -74,47 +69,38 @@ pub extern "C" fn kernel_main() -> ! {
                 keyboard::KeyEvents::Enter => {
                     let mut manager = screen_manager().lock();
                     
-                    // Add newline to move to next line on screen 2
                     if let Some(screen) = manager.get_screen_mut(2) {
                         let mut writer = Writer::new(screen);
                         writer.write_byte(b'\n');
                     }
                     
-                    // Only flush and update cursor if screen 2 is active
                     if manager.get_active_screen_id() == 2 {
                         manager.flush_to_physical();
                         manager.update_cursor();
                     }
                     
-                    // Release manager lock before executing command
                     drop(manager);
                     
-                    // Execute the command
                     {
                         let mut cmd_handler = command_handler().lock();
                         cmd_handler.execute_command();
                     }
                     
-                    // Show prompt again and set prompt position on screen 2
                     {
                         let mut manager = screen_manager().lock();
                         if let Some(screen) = manager.get_screen_mut(2) {
-                            // Write the prompt
                             let mut writer = Writer::new(screen);
                             writer.write_byte(b'>');
                             writer.write_byte(b' ');
                             
-                            // Get current cursor position for prompt (after writing "> ")
                             let prompt_row = screen.row_position;
                             let prompt_col = screen.column_position;
                             
-                            // Only flush and update cursor if screen 2 is active
                             if manager.get_active_screen_id() == 2 {
                                 manager.flush_to_physical();
                                 manager.update_cursor();
                             }
                             
-                            // Update prompt position in command handler
                             drop(manager);
                             let mut cmd_handler = command_handler().lock();
                             cmd_handler.set_prompt_position(prompt_row, prompt_col);
@@ -122,7 +108,6 @@ pub extern "C" fn kernel_main() -> ! {
                     }
                 }
                 
-                // Screen switching
                 keyboard::KeyEvents::SwitchScreenLeft => {
                     let mut manager = screen_manager().lock();
                     let current_screen = manager.get_active_screen_id();

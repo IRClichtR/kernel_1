@@ -11,10 +11,8 @@ pub fn init_screen_manager() {
         SCREEN_MANAGER = MaybeUninit::new(KSpinLock::new(ScreenManager::new()));
     }
     
-    // Initialize the screen with a clear state and proper cursor position
     {
         let mut manager = screen_manager().lock();
-        // Clear both screens
         manager.clear_screen(1);
         manager.clear_screen(2);
         manager.flush_to_physical();

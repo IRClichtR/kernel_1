@@ -1,7 +1,7 @@
 use crate::arch::x86::port::outb;
 use super::screen::{ Buffer, Screen, BUFFER_HEIGHT, BUFFER_WIDTH };
 
-const MAX_SCREENS: usize = 2; // Screen 1 for kernel messages, Screen 2 for user commands
+const MAX_SCREENS: usize = 2;
 
 pub struct ScreenManager {
     pub screens: [Option<Screen>; MAX_SCREENS],
@@ -12,8 +12,8 @@ pub struct ScreenManager {
 impl ScreenManager {
     pub fn new() -> Self {
         ScreenManager {
-            screens: core::array::from_fn(|i| Some(Screen::new(i + 1))), // Initialize screens 1 and 2
-            active_screen_id: 1, // Start with screen 1 (kernel messages screen)
+            screens: core::array::from_fn(|i| Some(Screen::new(i + 1))),
+            active_screen_id: 1,
             physical_buffer: unsafe {
                 &mut *(0xb8000 as *mut Buffer)
             },
@@ -74,7 +74,6 @@ impl ScreenManager {
                     writer.write_byte(byte);
                 }
                 
-                // Only flush and update cursor if this is the active screen
                 if self.active_screen_id == screen_id {
                     self.flush_to_physical();
                     self.update_cursor();
