@@ -46,25 +46,22 @@ impl Logger {
 impl Write for Logger {
     fn write_str(&mut self, s: &str) -> Result {
         let mut manager = screen_manager().lock();
-        let active_screen_id = manager.get_active_screen_id();
         
-        // Write to the currently active screen
-        if let Some(active_screen) = &mut manager.screens[active_screen_id] {
-            let mut writer = Writer::new(active_screen);
-            
-            // Write the log level prefix
-            for byte in self.level.as_str().bytes() {
-                writer.write_byte(byte);
-            }
-            
-            // Write the actual message
-            for byte in s.bytes() {
-                writer.write_byte(byte);
-            }
-
-            manager.flush_to_physical();
-            manager.update_cursor();
+        // Write to the screen
+        let mut writer = Writer::new(&mut manager.screen);
+        
+        // Write the log level prefix
+        for byte in self.level.as_str().bytes() {
+            writer.write_byte(byte);
         }
+        
+        // Write the actual message
+        for byte in s.bytes() {
+            writer.write_byte(byte);
+        }
+
+        manager.flush_to_physical();
+        manager.update_cursor();
         
         Ok(())
     }

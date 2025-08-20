@@ -8,7 +8,6 @@ pub mod kspin_lock;
 pub mod command;
 
 use core::panic::PanicInfo;
-use core::fmt::Write;
 use crate::drivers::keyboard;
 use crate::screen::global::{init_screen_manager, screen_manager};
 use crate::screen::screen::Writer;
@@ -28,21 +27,8 @@ pub extern "C" fn kernel_main() -> ! {
                 // Character input
                 keyboard::KeyEvents::Character(c) => {
                     let mut manager = screen_manager().lock();
-                    let active_screen_id = manager.active_screen_id;
-                    
-                    if active_screen_id == 1 {
-                        drop(manager);
-                        
-                        let mut cmd_handler = command_handler().lock();
-                        cmd_handler.add_char(c as u8);
-                    } else {
-                        if let Some(active_screen) = &mut manager.screens[active_screen_id] {
-                            let mut writer = Writer::new(active_screen);
-                            writer.write_byte(c as u8);
-                        }
-                        manager.flush_to_physical();
-                        manager.update_cursor();
-                    }
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.add_char(c as u8, &mut manager);
                 }
                 
                 // Arrow key navigation
@@ -55,171 +41,79 @@ pub extern "C" fn kernel_main() -> ! {
                     keyboard::move_cursor_down();
                 }
                 keyboard::KeyEvents::ArrowLeft => {
-                    let manager = screen_manager().lock();
-                    let active_screen_id = manager.active_screen_id;
-                    
-                    if active_screen_id == 1 {
-                        // Screen 1: Move cursor within command buffer
-                        drop(manager);
-                        let mut cmd_handler = command_handler().lock();
-                        cmd_handler.move_cursor_left();
-                    } else {
-                        // Other screens: Regular cursor movement
-                        drop(manager);
-                        keyboard::move_cursor_left();
-                    }
+                    let mut manager = screen_manager().lock();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.move_cursor_left(&mut manager);
                 }
                 keyboard::KeyEvents::ArrowRight => {
-                    let manager = screen_manager().lock();
-                    let active_screen_id = manager.active_screen_id;
-                    
-                    if active_screen_id == 1 {
-                        drop(manager);
-                        let mut cmd_handler = command_handler().lock();
-                        cmd_handler.move_cursor_right();
-                    } else {
-                        drop(manager);
-                        keyboard::move_cursor_right();
-                    }
+                    let mut manager = screen_manager().lock();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.move_cursor_right(&mut manager);
                 }
                 keyboard::KeyEvents::Home => {
-                    let manager = screen_manager().lock();
-                    let active_screen_id = manager.active_screen_id;
-                    
-                    if active_screen_id == 1 {
-                        drop(manager);
-                        let mut cmd_handler = command_handler().lock();
-                        cmd_handler.move_cursor_home();
-                    } else {
-                        drop(manager);
-                        keyboard::move_cursor_home();
-                    }
+                    let mut manager = screen_manager().lock();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.move_cursor_home(&mut manager);
                 }
                 keyboard::KeyEvents::End => {
-                    let manager = screen_manager().lock();
-                    let active_screen_id = manager.active_screen_id;
-                    
-                    if active_screen_id == 1 {
-                        drop(manager);
-                        let mut cmd_handler = command_handler().lock();
-                        cmd_handler.move_cursor_end();
-                    } else {
-                        drop(manager);
-                        keyboard::move_cursor_end();
-                    }
+                    let mut manager = screen_manager().lock();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.move_cursor_end(&mut manager);
                 }
                 keyboard::KeyEvents::BackSpace => {
-                    let manager = screen_manager().lock();
-                    let active_screen_id = manager.active_screen_id;
-                    
-                    if active_screen_id == 1 {
-                        drop(manager);
-                        let mut cmd_handler = command_handler().lock();
-                        cmd_handler.backspace();
-                    } else {
-                        drop(manager);
-                        keyboard::handle_backspace();
-                    }
+                    let mut manager = screen_manager().lock();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.backspace(&mut manager);
                 }
                 keyboard::KeyEvents::Delete => {
-                    // ROBUST DELETE KEY HANDLING
-                    let active_screen_id = {
-                        let manager = screen_manager().lock();
-                        let id = manager.active_screen_id;
-                        drop(manager); // Explicitly drop the lock
-                        id
-                    };
-                    
-                    if active_screen_id == 1 {
-                        // Use a separate scope to ensure locks are dropped
-                        {
-                            let mut cmd_handler = command_handler().lock();
-                            cmd_handler.delete_char();
-                            drop(cmd_handler); // Explicitly drop the lock
-                        }
-                    }
+                    let mut manager = screen_manager().lock();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.delete_char(&mut manager);
                 }
                 
                 keyboard::KeyEvents::Enter => {
                     let mut manager = screen_manager().lock();
-                    let active_screen_id = manager.active_screen_id;
                     
-                    if active_screen_id == 1 {
-                        // Add newline to move to next line
-                        if let Some(active_screen) = &mut manager.screens[active_screen_id] {
-                            let mut writer = Writer::new(active_screen);
-                            writer.write_byte(b'\n');
-                        }
+                    // Add newline to move to next line
+                    let mut writer = Writer::new(&mut manager.screen);
+                    writer.write_byte(b'\n');
+                    manager.flush_to_physical();
+                    manager.update_cursor();
+                    
+                    // Release manager lock before executing command
+                    drop(manager);
+                    
+                    // Execute the command
+                    {
+                        let mut cmd_handler = command_handler().lock();
+                        cmd_handler.execute_command();
+                    }
+                    
+                    // Show prompt again and set prompt position
+                    {
+                        let mut manager = screen_manager().lock();
+                        // Write the prompt
+                        let mut writer = Writer::new(&mut manager.screen);
+                        writer.write_byte(b'>');
+                        writer.write_byte(b' ');
+                        
+                        // Get current cursor position for prompt (after writing "> ")
+                        let prompt_row = manager.screen.row_position;
+                        let prompt_col = manager.screen.column_position;
+                        
                         manager.flush_to_physical();
                         manager.update_cursor();
                         
-                        // Release manager lock before executing command
+                        // Update prompt position in command handler
                         drop(manager);
-                        
-                        // Execute the command
-                        {
-                            let mut cmd_handler = command_handler().lock();
-                            cmd_handler.execute_command();
-                        }
-                        
-                        // Show prompt again and set prompt position
-                        {
-                            let mut manager = screen_manager().lock();
-                            if let Some(screen) = &mut manager.screens[1] {
-                                // Write the prompt
-                                let mut writer = Writer::new(screen);
-                                writer.write_byte(b'>');
-                                writer.write_byte(b' ');
-                                
-                                // Get current cursor position for prompt (after writing "> ")
-                                let prompt_row = screen.row_position;
-                                let prompt_col = screen.column_position;
-                                
-                                manager.flush_to_physical();
-                                manager.update_cursor();
-                                
-                                // Update prompt position in command handler
-                                drop(manager);
-                                let mut cmd_handler = command_handler().lock();
-                                cmd_handler.set_prompt_position(prompt_row, prompt_col);
-                            }
-                            else {
-                                manager.flush_to_physical();
-                                manager.update_cursor();
-                            }
-                        }
-                    } else {
-                        if let Some(active_screen) = &mut manager.screens[active_screen_id] {
-                            let mut writer = Writer::new(active_screen);
-                            writer.write_byte(b'\n');
-                        }
-                        manager.flush_to_physical();
-                        manager.update_cursor();
+                        let mut cmd_handler = command_handler().lock();
+                        cmd_handler.set_prompt_position(prompt_row, prompt_col);
                     }
                 }
                 
-                // Screen switching
-                keyboard::KeyEvents::SwitchScreenLeft => {
-                    let mut manager = screen_manager().lock();
-                    let current_screen = manager.active_screen_id;
-                    let new_screen = if current_screen == 0 { 1 } else { 0 };
-                    let switch_successful = manager.switch_screen(new_screen);
-                    
-                    if !switch_successful {
-                        drop(manager);
-                        printk!(LogLevel::Critical, "Fatal error switching the screen\n");
-                    }
-                }
-                keyboard::KeyEvents::SwitchScreenRight => {
-                    let mut manager = screen_manager().lock();
-                    let current_screen = manager.active_screen_id;
-                    let new_screen = if current_screen == 0 { 1 } else { 0 };
-                    let switch_successful = manager.switch_screen(new_screen);
-                    
-                    if !switch_successful {
-                        drop(manager);
-                        printk!(LogLevel::Critical, "Fatal error switching the screen\n");
-                    }
+                // Remove screen switching events - they are no longer supported
+                keyboard::KeyEvents::SwitchScreenLeft | keyboard::KeyEvents::SwitchScreenRight => {
+                    // Ignore screen switching events
                 }
             }
         }

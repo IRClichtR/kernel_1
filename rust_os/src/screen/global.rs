@@ -10,6 +10,15 @@ pub fn init_screen_manager() {
     unsafe {
         SCREEN_MANAGER = MaybeUninit::new(KSpinLock::new(ScreenManager::new()));
     }
+    
+    // Initialize the screen with a clear state and proper cursor position
+    {
+        let mut manager = screen_manager().lock();
+        manager.clear_screen();
+        manager.flush_to_physical();
+        manager.update_cursor();
+    }
+    
     printk!(LogLevel::Info, "Screen manager initialized.\n");
 }
 

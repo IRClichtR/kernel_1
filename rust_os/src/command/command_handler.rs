@@ -1,8 +1,6 @@
 use crate::screen::global::screen_manager;
 use crate::screen::screen::{Writer, BUFFER_WIDTH};
 use crate::arch::x86::port::outb;
-use core::fmt::Write;
-use crate::printk;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Command {
@@ -35,162 +33,157 @@ impl CommandHandler {
         self.prompt_start_col = col;
     }
 
-    pub fn add_char(&mut self, ch: u8) {
+    pub fn add_char(&mut self, ch: u8, manager: &mut crate::screen::manager::ScreenManager) {
         if self.buffer_len < self.buffer.len() - 1 && ch != b'\n' {
             // Get current cursor position from screen
-            let mut manager = screen_manager().lock();
-            if let Some(screen) = &mut manager.screens[1] {
-                let cursor_pos = screen.column_position.saturating_sub(self.prompt_start_col);
-                
-                // Insert character at cursor position
-                if cursor_pos < self.buffer_len {
-                    for i in (cursor_pos..self.buffer_len).rev() {
-                        self.buffer[i + 1] = self.buffer[i];
-                    }
-                }
-                
-                self.buffer[cursor_pos] = ch;
-                self.buffer_len += 1;
-                
-                // Write character to screen
-                let mut writer = Writer::new(screen);
-                writer.write_byte(ch);
-                
-                // Shift remaining characters if inserting in middle
-                if cursor_pos < self.buffer_len - 1 {
-                    for i in cursor_pos + 1..self.buffer_len {
-                        writer.write_byte(self.buffer[i]);
-                    }
+            let cursor_pos = manager.screen.column_position.saturating_sub(self.prompt_start_col);
+            
+            // Insert character at cursor position
+            if cursor_pos < self.buffer_len {
+                for i in (cursor_pos..self.buffer_len).rev() {
+                    self.buffer[i + 1] = self.buffer[i];
                 }
             }
-            printk!(LogLevel::Info, "Buffer length: {}\n", self.buffer_len);
+            
+            self.buffer[cursor_pos] = ch;
+            self.buffer_len += 1;
+            
+            // For simple case (appending at end), just write the character
+            if cursor_pos == self.buffer_len - 1 {
+                let mut writer = Writer::new(&mut manager.screen);
+                writer.write_byte(ch);
+            } else {
+                // For insertion in middle, redraw from cursor position to end
+                let start_col = self.prompt_start_col + cursor_pos;
+                let current_row = manager.screen.row_position;
+                
+                // Write all characters from cursor position to end
+                for i in cursor_pos..self.buffer_len {
+                    let col = start_col + (i - cursor_pos);
+                    if col < BUFFER_WIDTH {
+                        manager.screen.write_byte_at(current_row, col, self.buffer[i]);
+                    }
+                }
+                
+                // Move cursor to position after inserted character
+                manager.screen.column_position = self.prompt_start_col + cursor_pos + 1;
+            }
+            
             manager.flush_to_physical();
             manager.update_cursor();
         }
     }
 
-    pub fn delete_char(&mut self) {
-        let mut manager = screen_manager().lock();
-        if let Some(screen) = &mut manager.screens[1] {
-            let cursor_pos = screen.column_position.saturating_sub(self.prompt_start_col);
-            
-            if cursor_pos < self.buffer_len {
-                // Remove character from buffer
-                for i in cursor_pos..self.buffer_len - 1 {
-                    self.buffer[i] = self.buffer[i + 1];
-                }
-                
-                self.buffer_len -= 1;
-                self.buffer[self.buffer_len] = 0;
-                
-                // Clear current position and redraw remaining characters using direct screen manipulation
-                // Clear current position
-                screen.write_byte_at(screen.row_position, screen.column_position, b' ');
-                
-                // Redraw remaining characters after cursor (without advancing cursor)
-                for i in 0..self.buffer_len - cursor_pos {
-                    let col = self.prompt_start_col + cursor_pos + i;
-                    if col < BUFFER_WIDTH {
-                        screen.write_byte_at(screen.row_position, col, self.buffer[cursor_pos + i]);
-                    }
-                }
-                
-                // Clear any trailing character
-                let trailing_col = self.prompt_start_col + self.buffer_len;
-                if trailing_col < BUFFER_WIDTH {
-                    screen.write_byte_at(screen.row_position, trailing_col, b' ');
-                }
-                
-                // Cursor should stay in the same position after delete
-                // No need to reset cursor position since we didn't use Writer
+    pub fn delete_char(&mut self, manager: &mut crate::screen::manager::ScreenManager) {
+        let cursor_pos = manager.screen.column_position.saturating_sub(self.prompt_start_col);
+        
+        if cursor_pos < self.buffer_len {
+            // Remove character from buffer
+            for i in cursor_pos..self.buffer_len - 1 {
+                self.buffer[i] = self.buffer[i + 1];
             }
+            
+            self.buffer_len -= 1;
+            self.buffer[self.buffer_len] = 0;
+            
+            // Store cursor positions to avoid borrowing conflicts
+            let row_pos = manager.screen.row_position;
+            let col_pos = manager.screen.column_position;
+            
+            // Clear current position and redraw remaining characters using direct screen manipulation
+            // Clear current position
+            manager.screen.write_byte_at(row_pos, col_pos, b' ');
+            
+            // Redraw remaining characters after cursor (without advancing cursor)
+            for i in 0..self.buffer_len - cursor_pos {
+                let col = self.prompt_start_col + cursor_pos + i;
+                if col < BUFFER_WIDTH {
+                    manager.screen.write_byte_at(row_pos, col, self.buffer[cursor_pos + i]);
+                }
+            }
+            
+            // Clear any trailing character
+            let trailing_col = self.prompt_start_col + self.buffer_len;
+            if trailing_col < BUFFER_WIDTH {
+                manager.screen.write_byte_at(row_pos, trailing_col, b' ');
+            }
+            
+            // Cursor should stay in the same position after delete
+            // No need to reset cursor position since we didn't use Writer
         }
         manager.flush_to_physical();
         manager.update_cursor();
     }
 
-    pub fn backspace(&mut self) {
-        let mut manager = screen_manager().lock();
-        if let Some(screen) = &mut manager.screens[1] {
-            let cursor_pos = screen.column_position.saturating_sub(self.prompt_start_col);
+    pub fn backspace(&mut self, manager: &mut crate::screen::manager::ScreenManager) {
+        let cursor_pos = manager.screen.column_position.saturating_sub(self.prompt_start_col);
+        
+        if cursor_pos > 0 {
+            // Move cursor back first
+            manager.screen.column_position -= 1;
             
-            if cursor_pos > 0 {
-                // Move cursor back first
-                screen.column_position -= 1;
-                
-                // Remove character from buffer
-                for i in cursor_pos - 1..self.buffer_len - 1 {
-                    self.buffer[i] = self.buffer[i + 1];
-                }
-                
-                self.buffer_len -= 1;
-                self.buffer[self.buffer_len] = 0;
-                
-                // Clear current position and redraw remaining characters using direct screen manipulation
-                // Clear current position
-                screen.write_byte_at(screen.row_position, screen.column_position, b' ');
-                
-                // Redraw remaining characters (without advancing cursor)
-                for i in 0..self.buffer_len - (cursor_pos - 1) {
-                    let col = self.prompt_start_col + (cursor_pos - 1) + i;
-                    if col < BUFFER_WIDTH {
-                        screen.write_byte_at(screen.row_position, col, self.buffer[(cursor_pos - 1) + i]);
-                    }
-                }
-                
-                // Clear any trailing character
-                let trailing_col = self.prompt_start_col + self.buffer_len;
-                if trailing_col < BUFFER_WIDTH {
-                    screen.write_byte_at(screen.row_position, trailing_col, b' ');
-                }
-                
-                // Cursor is already in the correct position (moved back by 1)
-                // No need to reset cursor position since we didn't use Writer
+            // Remove character from buffer
+            for i in cursor_pos - 1..self.buffer_len - 1 {
+                self.buffer[i] = self.buffer[i + 1];
             }
+            
+            self.buffer_len -= 1;
+            self.buffer[self.buffer_len] = 0;
+            
+            // Store cursor positions to avoid borrowing conflicts
+            let row_pos = manager.screen.row_position;
+            let col_pos = manager.screen.column_position;
+            
+            // Clear current position and redraw remaining characters using direct screen manipulation
+            // Clear current position
+            manager.screen.write_byte_at(row_pos, col_pos, b' ');
+            
+            // Redraw remaining characters (without advancing cursor)
+            for i in 0..self.buffer_len - (cursor_pos - 1) {
+                let col = self.prompt_start_col + (cursor_pos - 1) + i;
+                if col < BUFFER_WIDTH {
+                    manager.screen.write_byte_at(row_pos, col, self.buffer[(cursor_pos - 1) + i]);
+                }
+            }
+            
+            // Clear any trailing character
+            let trailing_col = self.prompt_start_col + self.buffer_len;
+            if trailing_col < BUFFER_WIDTH {
+                manager.screen.write_byte_at(row_pos, trailing_col, b' ');
+            }
+            
+            // Cursor is already in the correct position (moved back by 1)
+            // No need to reset cursor position since we didn't use Writer
         }
         manager.flush_to_physical();
         manager.update_cursor();
     }
 
-    pub fn move_cursor_left(&mut self) {
-        let mut manager = screen_manager().lock();
-        if let Some(screen) = &mut manager.screens[1] {
-            let cursor_pos = screen.column_position.saturating_sub(self.prompt_start_col);
-            if cursor_pos > 0 {
-                screen.column_position -= 1;
-            }
+    pub fn move_cursor_left(&mut self, manager: &mut crate::screen::manager::ScreenManager) {
+        let cursor_pos = manager.screen.column_position.saturating_sub(self.prompt_start_col);
+        if cursor_pos > 0 {
+            manager.screen.column_position -= 1;
         }
         manager.update_cursor();
     }
 
-    pub fn move_cursor_right(&mut self) {
-        let mut manager = screen_manager().lock();
-        if let Some(screen) = &mut manager.screens[1] {
-            let cursor_pos = screen.column_position.saturating_sub(self.prompt_start_col);
-            if cursor_pos < self.buffer_len {
-                screen.column_position += 1;
-            }
+    pub fn move_cursor_right(&mut self, manager: &mut crate::screen::manager::ScreenManager) {
+        let cursor_pos = manager.screen.column_position.saturating_sub(self.prompt_start_col);
+        if cursor_pos < self.buffer_len {
+            manager.screen.column_position += 1;
         }
         manager.update_cursor();
     }
 
-    pub fn move_cursor_home(&mut self) {
-        let mut manager = screen_manager().lock();
-        if let Some(screen) = &mut manager.screens[1] {
-            screen.column_position = self.prompt_start_col;
-        }
+    pub fn move_cursor_home(&mut self, manager: &mut crate::screen::manager::ScreenManager) {
+        manager.screen.column_position = self.prompt_start_col;
         manager.update_cursor();
     }
 
-    pub fn move_cursor_end(&mut self) {
-        let mut manager = screen_manager().lock();
-        if let Some(screen) = &mut manager.screens[1] {
-            screen.column_position = self.prompt_start_col.saturating_add(self.buffer_len);
-        }
+    pub fn move_cursor_end(&mut self, manager: &mut crate::screen::manager::ScreenManager) {
+        manager.screen.column_position = self.prompt_start_col.saturating_add(self.buffer_len);
         manager.update_cursor();
     }
-
-
 
     pub fn execute_command(&mut self) -> bool {
         if self.buffer_len == 0 {
@@ -244,11 +237,9 @@ impl CommandHandler {
         // Write message before rebooting
         {
             let mut manager = screen_manager().lock();
-            if let Some(screen) = &mut manager.screens[1] {
-                let mut writer = Writer::new(screen);
-                for byte in b"Rebooting system...\n" {
-                    writer.write_byte(*byte);
-                }
+            let mut writer = Writer::new(&mut manager.screen);
+            for byte in b"Rebooting system...\n" {
+                writer.write_byte(*byte);
             }
             manager.flush_to_physical();
             manager.update_cursor();
@@ -291,11 +282,9 @@ impl CommandHandler {
     fn execute_halt(&self) {
         {
             let mut manager = screen_manager().lock();
-            if let Some(screen) = &mut manager.screens[1] {
-                let mut writer = Writer::new(screen);
-                for byte in b"System halted. Safe to power off.\n" {
-                    writer.write_byte(*byte);
-                }
+            let mut writer = Writer::new(&mut manager.screen);
+            for byte in b"System halted. Safe to power off.\n" {
+                writer.write_byte(*byte);
             }
             manager.flush_to_physical();
             manager.update_cursor();
@@ -321,37 +310,34 @@ impl CommandHandler {
 
     fn execute_clear(&self) {
         let mut manager = screen_manager().lock();
-        if manager.clear_screen(1) {
-            // Reset cursor to top
-            manager.set_cursor_position(0, 0);
-            manager.flush_to_physical();
-            manager.update_cursor();
-        }
+        manager.clear_screen();
+        // Reset cursor to top
+        manager.set_cursor_position(0, 0);
+        manager.flush_to_physical();
+        manager.update_cursor();
     }
 
     /// Executes the help command
     fn execute_help(&self) {
         let mut manager = screen_manager().lock();
-        if let Some(screen) = &mut manager.screens[1] {
-            let mut writer = Writer::new(screen);
-            // Write each line individually to ensure proper cursor updates
-            for byte in b"Available commands:\n" {
-                writer.write_byte(*byte);
-            }
-            for byte in b"  help   - Show this help message\n" {
-                writer.write_byte(*byte);
-            }
-            for byte in b"  clear  - Clear the screen\n" {
-                writer.write_byte(*byte);
-            }
-            for byte in b"  reboot - Restart the system\n" {
-                writer.write_byte(*byte);
-            }
-            for byte in b"  halt   - Halt the system (safe to power off)\n" {
-                writer.write_byte(*byte);
-            }
-            writer.write_byte(b'\n');
+        let mut writer = Writer::new(&mut manager.screen);
+        // Write each line individually to ensure proper cursor updates
+        for byte in b"Available commands:\n" {
+            writer.write_byte(*byte);
         }
+        for byte in b"  help   - Show this help message\n" {
+            writer.write_byte(*byte);
+        }
+        for byte in b"  clear  - Clear the screen\n" {
+            writer.write_byte(*byte);
+        }
+        for byte in b"  reboot - Restart the system\n" {
+            writer.write_byte(*byte);
+        }
+        for byte in b"  halt   - Halt the system (safe to power off)\n" {
+            writer.write_byte(*byte);
+        }
+        writer.write_byte(b'\n');
         manager.flush_to_physical();
         manager.update_cursor();
     }
@@ -359,11 +345,9 @@ impl CommandHandler {
     /// Executes unknown command response
     fn execute_unknown(&self) {
         let mut manager = screen_manager().lock();
-        if let Some(screen) = &mut manager.screens[1] {
-            let mut writer = Writer::new(screen);
-            for byte in b"Unknown command. Type 'help' for available commands.\n" {
-                writer.write_byte(*byte);
-            }
+        let mut writer = Writer::new(&mut manager.screen);
+        for byte in b"Unknown command. Type 'help' for available commands.\n" {
+            writer.write_byte(*byte);
         }
         manager.flush_to_physical();
         manager.update_cursor();
