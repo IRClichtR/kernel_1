@@ -132,8 +132,20 @@ pub fn handle_scancode(scancode: u8) -> Option<KeyEvents> {
             return match key_code {
                 0x48 => Some(KeyEvents::ArrowUp),    // Up arrow
                 0x50 => Some(KeyEvents::ArrowDown),  // Down arrow
-                0x4B => Some(KeyEvents::ArrowLeft),  // Left arrow
-                0x4D => Some(KeyEvents::ArrowRight), // Right arrow
+                0x4B => {
+                    if CTRL_PRESSED {
+                        Some(KeyEvents::SwitchScreenLeft)  // Ctrl+Left = switch screen left
+                    } else {
+                        Some(KeyEvents::ArrowLeft)  // Left arrow
+                    }
+                }
+                0x4D => {
+                    if CTRL_PRESSED {
+                        Some(KeyEvents::SwitchScreenRight) // Ctrl+Right = switch screen right
+                    } else {
+                        Some(KeyEvents::ArrowRight) // Right arrow
+                    }
+                }
                 0x47 => Some(KeyEvents::Home),       // Home
                 0x4F => Some(KeyEvents::End),        // End
                 0x53 => Some(KeyEvents::Delete),     // Delete key (E0 53)
@@ -215,70 +227,78 @@ pub fn handle_scancode(scancode: u8) -> Option<KeyEvents> {
 
 pub fn move_cursor_up() {
     let mut manager = screen_manager().lock();
-    let row = manager.screen.row_position;
+    let active_screen = manager.get_active_screen_mut();
+    let row = active_screen.row_position;
     if row > 0 {
-        manager.screen.set_row_position(row - 1);
+        active_screen.set_row_position(row - 1);
     }
     manager.update_cursor();
 }
 
 pub fn move_cursor_down() {
     let mut manager = screen_manager().lock();
-    let row = manager.screen.row_position;
+    let active_screen = manager.get_active_screen_mut();
+    let row = active_screen.row_position;
     if row < BUFFER_HEIGHT - 1 {
-        manager.screen.set_row_position(row + 1);
+        active_screen.set_row_position(row + 1);
     }
     manager.update_cursor();
 }
 
 pub fn move_cursor_left() {
     let mut manager = screen_manager().lock();
-    let col = manager.screen.column_position;
+    let active_screen = manager.get_active_screen_mut();
+    let col = active_screen.column_position;
     if col > 0 {
-        manager.screen.set_column_position(col - 1);
+        active_screen.set_column_position(col - 1);
     }
     manager.update_cursor();
 }
 
 pub fn move_cursor_right() {
     let mut manager = screen_manager().lock();
-    let col = manager.screen.column_position;
+    let active_screen = manager.get_active_screen_mut();
+    let col = active_screen.column_position;
     if col < BUFFER_WIDTH - 1 {
-        manager.screen.set_column_position(col + 1);
+        active_screen.set_column_position(col + 1);
     }
     manager.update_cursor();
 }
 
 pub fn write_at_cursor(c: char) {
     let mut manager = screen_manager().lock();
-    manager.screen.write_byte(c as u8);
+    let active_screen = manager.get_active_screen_mut();
+    active_screen.write_byte(c as u8);
     manager.flush_to_physical();
     manager.update_cursor();
 }
 
 pub fn move_cursor_home() {
     let mut manager = screen_manager().lock();
-    manager.screen.set_cursor_position(0, 0);
+    let active_screen = manager.get_active_screen_mut();
+    active_screen.set_cursor_position(0, 0);
     manager.update_cursor();
 }
 
 pub fn move_cursor_end() {
     let mut manager = screen_manager().lock();
-    manager.screen.set_cursor_position(BUFFER_HEIGHT - 1, BUFFER_WIDTH - 1);
+    let active_screen = manager.get_active_screen_mut();
+    active_screen.set_cursor_position(BUFFER_HEIGHT - 1, BUFFER_WIDTH - 1);
     manager.update_cursor();
 }
 
 pub fn handle_backspace() {
     let mut manager = screen_manager().lock();
-    let col = manager.screen.column_position;
+    let active_screen = manager.get_active_screen_mut();
+    let col = active_screen.column_position;
     if col > 0 {
-        manager.screen.set_column_position(col - 1);
+        active_screen.set_column_position(col - 1);
         
         // Store cursor positions to avoid borrowing conflicts
-        let row_pos = manager.screen.row_position;
-        let col_pos = manager.screen.column_position;
+        let row_pos = active_screen.row_position;
+        let col_pos = active_screen.column_position;
         
-        manager.screen.write_byte_at(row_pos, col_pos, b' ');
+        active_screen.write_byte_at(row_pos, col_pos, b' ');
     }
     manager.flush_to_physical();
     manager.update_cursor();
@@ -286,12 +306,13 @@ pub fn handle_backspace() {
 
 pub fn handle_delete() {
     let mut manager = screen_manager().lock();
+    let active_screen = manager.get_active_screen_mut();
     
     // Store cursor positions to avoid borrowing conflicts
-    let row_pos = manager.screen.row_position;
-    let col_pos = manager.screen.column_position;
+    let row_pos = active_screen.row_position;
+    let col_pos = active_screen.column_position;
     
-    manager.screen.write_byte_at(row_pos, col_pos, b' ');
+    active_screen.write_byte_at(row_pos, col_pos, b' ');
     manager.flush_to_physical();
     manager.update_cursor();
 }
