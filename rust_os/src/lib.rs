@@ -5,52 +5,30 @@ pub mod printk;
 pub mod arch;
 pub mod screen;
 pub mod kspin_lock;
+pub mod command;
+
 use core::panic::PanicInfo;
-use core::fmt::Write;
 use crate::drivers::keyboard;
 use crate::screen::global::{init_screen_manager, screen_manager};
 use crate::screen::screen::Writer;
+use crate::command::{init_command_handler, command_handler};
 
 #[no_mangle]
 pub extern "C" fn kernel_main() -> ! {
     init_screen_manager();
-    
-    {
-        let mut manager = screen_manager().lock();
-    
-        if let Some(_screen_id) = manager.create_screen() {            
-            if manager.switch_screen(1) {
-                if let Some(screen) = &mut manager.screens[1] {
-                    let mut writer = Writer::new(screen);
-                    write!(writer, "#                             Welcome to the User Terminal                     #\n").unwrap();
-                    write!(writer, "\n").unwrap();
-                }
-            }
-
-            manager.switch_screen(0);
-        }
-    }
+    init_command_handler(); 
     
     keyboard::init_keyboard();
 
     loop {
-        // Poll keyboard for input
         if let Some(key_event) = keyboard::poll_keyboard() {
             match key_event {
-                // chars - now uses screen manager
                 keyboard::KeyEvents::Character(c) => {
                     let mut manager = screen_manager().lock();
-                    let active_screen_id = manager.active_screen_id; // Store the ID first
-                    if let Some(active_screen) = &mut manager.screens[active_screen_id] {
-                        use crate::screen::screen::Writer;
-                        let mut writer = Writer::new(active_screen);
-                        writer.write_byte(c as u8);
-                    }
-                    manager.flush_to_physical();
-                    manager.update_cursor();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.add_char(c as u8, &mut manager);
                 }
                 
-                // special keys
                 keyboard::KeyEvents::ArrowUp => {
                     keyboard::move_cursor_up();
                 }
@@ -58,59 +36,101 @@ pub extern "C" fn kernel_main() -> ! {
                     keyboard::move_cursor_down();
                 }
                 keyboard::KeyEvents::ArrowLeft => {
-                    keyboard::move_cursor_left();
+                    let mut manager = screen_manager().lock();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.move_cursor_left(&mut manager);
                 }
                 keyboard::KeyEvents::ArrowRight => {
-                    keyboard::move_cursor_right();
+                    let mut manager = screen_manager().lock();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.move_cursor_right(&mut manager);
                 }
                 keyboard::KeyEvents::Home => {
-                    keyboard::move_cursor_home();
+                    let mut manager = screen_manager().lock();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.move_cursor_home(&mut manager);
                 }
                 keyboard::KeyEvents::End => {
-                    keyboard::move_cursor_end();
+                    let mut manager = screen_manager().lock();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.move_cursor_end(&mut manager);
                 }
-                
-                // editing keys
                 keyboard::KeyEvents::BackSpace => {
-                    keyboard::handle_backspace();
+                    let mut manager = screen_manager().lock();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.backspace(&mut manager);
                 }
                 keyboard::KeyEvents::Delete => {
-                    keyboard::handle_delete();
+                    let mut manager = screen_manager().lock();
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.delete_char(&mut manager);
                 }
                 
-                // enter key - now uses screen manager
                 keyboard::KeyEvents::Enter => {
                     let mut manager = screen_manager().lock();
-                    let active_screen_id = manager.active_screen_id; // Store the ID first
-                    if let Some(active_screen) = &mut manager.screens[active_screen_id] {
-                        use crate::screen::screen::Writer;
-                        let mut writer = Writer::new(active_screen);
-                        writer.write_byte(b'\n');  // This will trigger new_line logic in Writer
-                    }
-                    manager.flush_to_physical();
-                    manager.update_cursor();
-                }
-                keyboard::KeyEvents::SwitchScreenLeft => {
-                    let switch_successful = {
-                        let mut manager = screen_manager().lock();
-                        let current_screen = manager.active_screen_id;
-                        let new_screen = if current_screen == 0 { 1 } else { 0 };
-                        manager.switch_screen(new_screen)
-                    };
                     
-                    if !switch_successful {
+                    if let Some(screen) = manager.get_screen_mut(2) {
+                        let mut writer = Writer::new(screen);
+                        writer.write_byte(b'\n');
+                    }
+                    
+                    if manager.get_active_screen_id() == 2 {
+                        manager.flush_to_physical();
+                        manager.update_cursor();
+                    }
+                    
+                    drop(manager);
+                    
+                    {
+                        let mut cmd_handler = command_handler().lock();
+                        cmd_handler.execute_command();
+                    }
+                    
+                    {
+                        let mut manager = screen_manager().lock();
+                        if let Some(screen) = manager.get_screen_mut(2) {
+                            let mut writer = Writer::new(screen);
+                            writer.write_byte(b'>');
+                            writer.write_byte(b' ');
+                            
+                            let prompt_row = screen.row_position;
+                            let prompt_col = screen.column_position;
+                            
+                            if manager.get_active_screen_id() == 2 {
+                                manager.flush_to_physical();
+                                manager.update_cursor();
+                            }
+                            
+                            drop(manager);
+                            let mut cmd_handler = command_handler().lock();
+                            cmd_handler.set_prompt_position(prompt_row, prompt_col);
+                        }
+                    }
+                }
+                
+                keyboard::KeyEvents::SwitchScreenLeft => {
+                    let mut manager = screen_manager().lock();
+                    let current_screen = manager.get_active_screen_id();
+                    let new_screen = if current_screen == 1 { 2 } else { 1 };
+                    let switch_successful = manager.switch_screen(new_screen);
+                    
+                    if switch_successful {
+                        drop(manager);
+                    } else {
+                        drop(manager);
                         printk!(LogLevel::Critical, "Fatal error switching the screen\n");
                     }
                 }
                 keyboard::KeyEvents::SwitchScreenRight => {
-                    let switch_successful = {
-                        let mut manager = screen_manager().lock();
-                        let current_screen = manager.active_screen_id;
-                        let new_screen = if current_screen == 0 { 1 } else { 0 };
-                        manager.switch_screen(new_screen)
-                    };
+                    let mut manager = screen_manager().lock();
+                    let current_screen = manager.get_active_screen_id();
+                    let new_screen = if current_screen == 1 { 2 } else { 1 };
+                    let switch_successful = manager.switch_screen(new_screen);
                     
-                    if !switch_successful {
+                    if switch_successful {
+                        drop(manager);
+                    } else {
+                        drop(manager);
                         printk!(LogLevel::Critical, "Fatal error switching the screen\n");
                     }
                 }

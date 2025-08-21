@@ -10,7 +10,21 @@ pub fn init_screen_manager() {
     unsafe {
         SCREEN_MANAGER = MaybeUninit::new(KSpinLock::new(ScreenManager::new()));
     }
+    
+    {
+        let mut manager = screen_manager().lock();
+        manager.clear_screen(1);
+        manager.clear_screen(2);
+        manager.flush_to_physical();
+        manager.update_cursor();
+    }
+    
     printk!(LogLevel::Info, "Screen manager initialized.\n");
+    printk!(LogLevel::Info, "=== Dual Screen System ===\n");
+    printk!(LogLevel::Info, "Screen 1: Kernel messages and system logs (current)\n");
+    printk!(LogLevel::Info, "Screen 2: User command interface\n");
+    printk!(LogLevel::Info, "Use Ctrl+Left/Right arrows to switch between screens\n");
+    printk!(LogLevel::Info, "=============================\n");
 }
 
 pub fn screen_manager() -> &'static KSpinLock<ScreenManager> {

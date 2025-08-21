@@ -46,22 +46,20 @@ impl Logger {
 impl Write for Logger {
     fn write_str(&mut self, s: &str) -> Result {
         let mut manager = screen_manager().lock();
-        let active_screen_id = manager.get_active_screen_id();
         
-        // Write to the currently active screen
-        if let Some(active_screen) = &mut manager.screens[active_screen_id] {
-            let mut writer = Writer::new(active_screen);
+        if let Some(screen) = manager.get_screen_mut(1) {
+            let mut writer = Writer::new(screen);
             
-            // Write the log level prefix
             for byte in self.level.as_str().bytes() {
                 writer.write_byte(byte);
             }
             
-            // Write the actual message
             for byte in s.bytes() {
                 writer.write_byte(byte);
             }
+        }
 
+        if manager.get_active_screen_id() == 1 {
             manager.flush_to_physical();
             manager.update_cursor();
         }
@@ -72,21 +70,20 @@ impl Write for Logger {
 
 #[macro_export]
 macro_rules! printk {
-    // Case with explicit log level
-    ($level:expr, $($arg:tt)*) => {{
-        use core::fmt::Write;
-        use crate::printk::printk::Logger;
-        use crate::printk::printk::LogLevel;
-        let mut logger = Logger::new($level);
-        let _ = write!(logger, $($arg)*);
-    }};
-    
-    // Case with no log level, use Default
-    ($($arg:tt)*) => {{
-        use core::fmt::Write;
-        use crate::printk::printk::Logger;
-        use crate::printk::printk::LogLevel;
-        let mut logger = Logger::new(LogLevel::Default);
-        let _ = write!(logger, $($arg)*);
-    }};
+    ($level:expr, $($arg:tt)*) => {
+        {
+            use crate::printk::printk::{Logger, LogLevel};
+            use core::fmt::Write;
+            let mut logger = Logger::new($level);
+            let _ = write!(logger, $($arg)*);
+        }
+    };
+    ($($arg:tt)*) => {
+        {
+            use crate::printk::printk::{Logger, LogLevel};
+            use core::fmt::Write;
+            let mut logger = Logger::new(LogLevel::Default);
+            let _ = write!(logger, $($arg)*);
+        }
+    };
 }
