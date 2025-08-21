@@ -12,6 +12,7 @@ use crate::drivers::keyboard;
 use crate::screen::global::{init_screen_manager, screen_manager};
 use crate::screen::screen::Writer;
 use crate::command::{init_command_handler, command_handler};
+use crate::arch::x86::gdt::{read_gdtr, analyse_gdt_entry};
 
 #[no_mangle]
 pub extern "C" fn kernel_main() -> ! {
@@ -19,6 +20,10 @@ pub extern "C" fn kernel_main() -> ! {
     init_command_handler(); 
     
     keyboard::init_keyboard();
+    let gdt_desc = read_gdtr();
+    let limit = gdt_desc.limit as usize;
+    let gdt_base = gdt_desc.base as usize;
+    printk!(LogLevel::Info, "GDT Base: {:#010x}, Limit: {:#06x}\n", gdt_base, limit);
 
     loop {
         if let Some(key_event) = keyboard::poll_keyboard() {
