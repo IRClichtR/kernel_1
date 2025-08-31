@@ -1,7 +1,8 @@
 use crate::arch::x86::port::inb;
+use crate::command::{init_command_handler, command_handler};
+use crate::screen::global::{init_screen_manager, screen_manager};
+use crate::screen::screen::{BUFFER_HEIGHT, BUFFER_WIDTH, Writer};
 use crate::printk;
-use crate::screen::global::screen_manager;
-use crate::screen::screen::{BUFFER_HEIGHT, BUFFER_WIDTH};
 
 const KEYBOARD_DATA_PORT: u16 = 0x60;
 const KEYBOARD_STATUS_PORT: u16 = 0x64;
@@ -304,4 +305,126 @@ pub fn handle_delete() {
     active_screen.write_byte_at(row_pos, col_pos, b' ');
     manager.flush_to_physical();
     manager.update_cursor();
+}
+
+//=====================================================================================================================================
+//                                         LISTEN TO KEYBOARD EVENTS
+//=====================================================================================================================================
+
+pub fn listen_to_keyboard_events() {
+    if let Some(key_event) = poll_keyboard() {
+        match key_event {
+            KeyEvents::Character(c) => {
+                let mut manager = screen_manager().lock();
+                let mut cmd_handler = command_handler().lock();
+                cmd_handler.add_char(c as u8, &mut manager);
+            }
+                
+            KeyEvents::ArrowUp => {
+                move_cursor_up();
+            }
+            KeyEvents::ArrowDown => {
+                move_cursor_down();
+            }
+            KeyEvents::ArrowLeft => {
+                let mut manager = screen_manager().lock();
+                let mut cmd_handler = command_handler().lock();
+                cmd_handler.move_cursor_left(&mut manager);
+            }
+            KeyEvents::ArrowRight => {
+                let mut manager = screen_manager().lock();
+                let mut cmd_handler = command_handler().lock();
+                cmd_handler.move_cursor_right(&mut manager);
+            }
+            KeyEvents::Home => {
+                let mut manager = screen_manager().lock();
+                let mut cmd_handler = command_handler().lock();
+                cmd_handler.move_cursor_home(&mut manager);
+            }
+            KeyEvents::End => {
+                let mut manager = screen_manager().lock();
+                let mut cmd_handler = command_handler().lock();
+                cmd_handler.move_cursor_end(&mut manager);
+            }
+            KeyEvents::BackSpace => {
+                let mut manager = screen_manager().lock();
+                let mut cmd_handler = command_handler().lock();
+                cmd_handler.backspace(&mut manager);
+            }
+            KeyEvents::Delete => {
+                let mut manager = screen_manager().lock();
+                let mut cmd_handler = command_handler().lock();
+                cmd_handler.delete_char(&mut manager);
+            }
+            
+            KeyEvents::Enter => {
+                let mut manager = screen_manager().lock();
+                    
+                if let Some(screen) = manager.get_screen_mut(2) {
+                    let mut writer = Writer::new(screen);
+                    writer.write_byte(b'\n');
+                }
+                    
+                if manager.get_active_screen_id() == 2 {
+                    manager.flush_to_physical();
+                    manager.update_cursor();
+                }
+                
+                drop(manager);
+                    
+                {
+                    let mut cmd_handler = command_handler().lock();
+                    cmd_handler.execute_command();
+                }
+                    
+                {
+                    let mut manager = screen_manager().lock();
+                    if let Some(screen) = manager.get_screen_mut(2) {
+                        let mut writer = Writer::new(screen);
+                        writer.write_byte(b'>');
+                        writer.write_byte(b' ');
+                            
+                        let prompt_row = screen.row_position;
+                        let prompt_col = screen.column_position;
+                        
+                        if manager.get_active_screen_id() == 2 {
+                            manager.flush_to_physical();
+                            manager.update_cursor();
+                        }
+                            
+                        drop(manager);
+                        let mut cmd_handler = command_handler().lock();
+                        cmd_handler.set_prompt_position(prompt_row, prompt_col);
+                    }
+                }
+            }
+                
+            KeyEvents::SwitchScreenLeft => {
+                let mut manager = screen_manager().lock();
+                let current_screen = manager.get_active_screen_id();
+                let new_screen = if current_screen == 1 { 2 } else { 1 };
+                let switch_successful = manager.switch_screen(new_screen);
+                    
+                if switch_successful {
+                    drop(manager);
+                } else {
+                    drop(manager);
+                    printk!(LogLevel::Critical, "Fatal error switching the screen\n");
+                }
+            }
+            KeyEvents::SwitchScreenRight => {
+                let mut manager = screen_manager().lock();
+                let current_screen = manager.get_active_screen_id();
+                let new_screen = if current_screen == 1 { 2 } else { 1 };
+                let switch_successful = manager.switch_screen(new_screen);
+                    
+                if switch_successful {
+                    drop(manager);
+                } else {
+                    drop(manager);
+                    printk!(LogLevel::Critical, "Fatal error switching the screen\n");
+                }
+            }
+        }
+    }
 }
