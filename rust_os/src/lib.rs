@@ -22,11 +22,7 @@ pub extern "C" fn kernel_main() -> ! {
     init_screen_manager();
     init_command_handler(); 
     
-    // keyboard::init_keyboard();
-    // let gdt_desc = read_gdtr();
-    // let limit = gdt_desc.limit as usize;
-    // let gdt_base = gdt_desc.base as usize;
-    // printk!(LogLevel::Info, "GDT Base: {:#010x}, Limit: {:#06x}\n", gdt_base, limit);
+    keyboard::init_keyboard();
 
     loop {
         if let Some(key_event) = keyboard::poll_keyboard() {
