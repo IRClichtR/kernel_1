@@ -18,7 +18,7 @@ use crate::arch::x86::gdt;
 
 #[no_mangle]
 pub extern "C" fn kernel_main() -> ! {
-    gdt::init_gdt();
+    // gdt::init_gdt();
     init_screen_manager();
     init_command_handler(); 
     

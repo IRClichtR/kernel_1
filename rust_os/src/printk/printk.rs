@@ -34,32 +34,47 @@ impl LogLevel {
 
 pub struct Logger {
     level: LogLevel,
+    loglvl_write_flag: bool
 }
+
 
 #[allow(dead_code)]
 impl Logger {
     pub fn new(level: LogLevel) -> Self {
-        Self { level }
+        Self { 
+            level,
+            loglvl_write_flag: false
+         }
     }
 }
 
 impl Write for Logger {
     fn write_str(&mut self, s: &str) -> Result {
         let mut manager = screen_manager().lock();
+        let active_screen_id = manager.get_active_screen_id();
         
-        if let Some(screen) = manager.get_screen_mut(1) {
-            let mut writer = Writer::new(screen);
+        // Write to the currently active screen
+        if let Some(active_screen) = &mut manager.screens[active_screen_id] {
+            let mut writer = Writer::new(active_screen);
             
-            for byte in self.level.as_str().bytes() {
-                writer.write_byte(byte);
+            if self.loglvl_write_flag == false {
+                for byte in self.level.as_str().bytes() {
+                    writer.write_byte(byte);
+                }
+                self.loglvl_write_flag = true;
             }
             
+            // Write the actual message
             for byte in s.bytes() {
                 writer.write_byte(byte);
-            }
-        }
 
-        if manager.get_active_screen_id() == 1 {
+                // Handle newline characters
+                if byte == b'\n' {
+                    // Reset log level write flag for next line
+                    self.loglvl_write_flag = false;
+                }
+            }
+
             manager.flush_to_physical();
             manager.update_cursor();
         }
@@ -70,20 +85,37 @@ impl Write for Logger {
 
 #[macro_export]
 macro_rules! printk {
-    ($level:expr, $($arg:tt)*) => {
-        {
-            use crate::printk::printk::{Logger, LogLevel};
-            use core::fmt::Write;
-            let mut logger = Logger::new($level);
-            let _ = write!(logger, $($arg)*);
+    // Case with explicit log level
+    ($level:expr, $($arg:tt)*) => {{
+        use core::fmt::Write;
+        use crate::printk::printk::{Logger, LogLevel};
+
+        let mut logger = Logger::new($level);
+        
+        // Panic if write fails
+        match write!(logger, $($arg)*) {
+            Ok(_) => {},
+            Err(_) => {
+                let mut debug_logger = Logger::new(LogLevel::Error);
+                let _ = debug_logger.write_str("PRINTK ERROR!\n");
+                panic!("printk failed");
+            }
         }
-    };
-    ($($arg:tt)*) => {
-        {
-            use crate::printk::printk::{Logger, LogLevel};
-            use core::fmt::Write;
-            let mut logger = Logger::new(LogLevel::Default);
-            let _ = write!(logger, $($arg)*);
+    }};
+    
+    // Case with no log level, use Default
+    ($($arg:tt)*) => {{
+        use core::fmt::Write;
+        use crate::printk::printk::{Logger, LogLevel};
+
+        let mut logger = Logger::new(LogLevel::Default);
+        
+        match write!(logger, $($arg)*) {
+            Ok(_) => {},
+            Err(_) => {
+                let mut debug_logger = Logger::new(LogLevel::Error);
+                let _ = debug_logger.write_str("PRINTK ERROR!\n");
+            }
         }
-    };
+    }};
 }
